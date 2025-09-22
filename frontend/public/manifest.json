@@ -1,0 +1,114 @@
+{
+  "short_name": "AI Stock Trading",
+  "name": "AI Stock Trading Platform - Multi-Market Analysis",
+  "description": "AI-powered stock trading and analysis platform with multi-market support (US, UK, India)",
+  "icons": [
+    {
+      "src": "favicon.ico",
+      "sizes": "64x64 32x32 24x24 16x16",
+      "type": "image/x-icon"
+    },
+    {
+      "src": "apple-touch-icon.png",
+      "sizes": "180x180",
+      "type": "image/png"
+    },
+    {
+      "src": "icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "icon-96.png",
+      "sizes": "96x96",
+      "type": "image/png"
+    }
+  ],
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "theme_color": "#007AFF",
+  "background_color": "#ffffff",
+  "categories": [
+    "finance",
+    "business",
+    "productivity"
+  ],
+  "lang": "en",
+  "dir": "ltr",
+  "prefer_related_applications": false,
+  "related_applications": [],
+  "screenshots": [
+    {
+      "src": "screenshot-wide.png",
+      "sizes": "1280x720",
+      "type": "image/png",
+      "form_factor": "wide"
+    },
+    {
+      "src": "screenshot-narrow.png",
+      "sizes": "750x1334",
+      "type": "image/png",
+      "form_factor": "narrow"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "AI Assistant",
+      "short_name": "AI Chat",
+      "description": "Open AI Assistant for stock analysis",
+      "url": "/ai-assistant",
+      "icons": [
+        {
+          "src": "icon-96.png",
+          "sizes": "96x96"
+        }
+      ]
+    },
+    {
+      "name": "Trading Bot",
+      "short_name": "Trading Bot",
+      "description": "AI-powered shadow trading bot",
+      "url": "/trading-bot",
+      "icons": [
+        {
+          "src": "icon-96.png",
+          "sizes": "96x96"
+        }
+      ]
+    },
+    {
+      "name": "Portfolio",
+      "short_name": "Portfolio",
+      "description": "View your investment portfolio",
+      "url": "/portfolio",
+      "icons": [
+        {
+          "src": "icon-96.png",
+          "sizes": "96x96"
+        }
+      ]
+    },
+    {
+      "name": "Market Analysis",
+      "short_name": "Market",
+      "description": "Analyze market trends and top stocks",
+      "url": "/analysis",
+      "icons": [
+        {
+          "src": "icon-96.png",
+          "sizes": "96x96"
+        }
+      ]
+    }
+  ],
+  "timestamp": "2025-08-24T12:00:00Z"
+}

@@ -1,0 +1,20 @@
+# Use Python slim image
+FROM python:3.9-slim
+
+# Set working directory
+WORKDIR /app
+
+# Install Flask
+RUN pip install flask gunicorn
+
+# Copy the static file server
+COPY static-server.py .
+
+# Copy the built React app
+COPY build/ build/
+
+# Expose port
+EXPOSE 8080
+
+# Run the server
+CMD exec gunicorn --bind :$PORT --workers 1 --threads 8 --timeout 0 static-server:app

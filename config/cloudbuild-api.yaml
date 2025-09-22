@@ -1,0 +1,16 @@
+steps:
+  # Build the Docker image
+  - name: 'gcr.io/cloud-builders/docker'
+    args: [
+      'build', 
+      '-f', 'Dockerfile.api',
+      '-t', 'gcr.io/$PROJECT_ID/ai-stock-trading-api:latest',
+      '.'
+    ]
+  
+  # Push the Docker image
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['push', 'gcr.io/$PROJECT_ID/ai-stock-trading-api:latest']
+
+images:
+  - 'gcr.io/$PROJECT_ID/ai-stock-trading-api:latest'

@@ -1,0 +1,5 @@
+steps:
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['build', '-f', 'Dockerfile.api', '-t', 'gcr.io/stockadvisor-463716/ai-stock-trading-simple:latest', '.']
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['push', 'gcr.io/stockadvisor-463716/ai-stock-trading-simple:latest']

@@ -1,0 +1,240 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Mobile-specific styles */
+@media (max-width: 640px) {
+  /* Improve touch targets */
+  button, select, input {
+    min-height: 44px;
+  }
+  
+  /* Better scrolling on mobile */
+  .overflow-y-auto {
+    -webkit-overflow-scrolling: touch;
+  }
+  
+  /* Prevent zoom on input focus */
+  input, select, textarea {
+    font-size: 16px;
+  }
+  
+  /* Better table responsiveness */
+  table {
+    font-size: 12px;
+  }
+  
+  /* Improve chart responsiveness */
+  .recharts-wrapper {
+    width: 100% !important;
+    height: auto !important;
+  }
+}
+
+/* Custom scrollbar for webkit browsers */
+::-webkit-scrollbar {
+  width: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: #f1f1f1;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #c1c1c1;
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #a8a8a8;
+}
+
+/* Markdown table styles */
+.prose table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 1rem 0;
+  font-size: 0.875rem;
+}
+
+.prose th,
+.prose td {
+  border: 1px solid #e5e7eb;
+  padding: 0.5rem;
+  text-align: left;
+}
+
+.prose th {
+  background-color: #f9fafb;
+  font-weight: 600;
+}
+
+.prose tr:nth-child(even) {
+  background-color: #f9fafb;
+}
+
+/* Mobile table responsiveness */
+@media (max-width: 640px) {
+  .prose table {
+    font-size: 0.75rem;
+  }
+  
+  .prose th,
+  .prose td {
+    padding: 0.25rem;
+  }
+}
+
+/* Loading spinner */
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.animate-spin {
+  animation: spin 1s linear infinite;
+}
+
+/* Focus styles for accessibility */
+.focus\:ring-2:focus {
+  outline: 2px solid transparent;
+  outline-offset: 2px;
+}
+
+/* Mobile navigation improvements */
+@media (max-width: 1024px) {
+  .mobile-nav-open {
+    overflow: hidden;
+  }
+}
+
+/* Chart container responsiveness */
+.chart-container {
+  width: 100%;
+  height: 300px;
+}
+
+@media (min-width: 640px) {
+  .chart-container {
+    height: 400px;
+  }
+}
+
+@media (min-width: 1024px) {
+  .chart-container {
+    height: 500px;
+  }
+}
+
+/* Custom styles for markdown content */
+.prose {
+  @apply text-sm leading-relaxed;
+}
+
+.prose h1, .prose h2, .prose h3, .prose h4, .prose h5, .prose h6 {
+  @apply font-semibold text-gray-900 mb-2;
+}
+
+.prose h1 {
+  @apply text-xl;
+}
+
+.prose h2 {
+  @apply text-lg;
+}
+
+.prose h3 {
+  @apply text-base;
+}
+
+.prose ul {
+  @apply list-disc list-inside space-y-1;
+}
+
+.prose ol {
+  @apply list-decimal list-inside space-y-1;
+}
+
+.prose li {
+  @apply text-sm;
+}
+
+.prose strong {
+  @apply font-semibold;
+}
+
+.prose em {
+  @apply italic;
+}
+
+.prose code {
+  @apply bg-gray-200 px-1 py-0.5 rounded text-xs font-mono;
+}
+
+.prose pre {
+  @apply bg-gray-100 p-2 rounded text-xs overflow-x-auto;
+}
+
+.prose blockquote {
+  @apply border-l-4 border-gray-300 pl-4 italic text-gray-600;
+}
+
+/* Ensure emojis display properly */
+.prose * {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+
+@layer base {
+  html {
+    font-family: 'Inter', system-ui, sans-serif;
+  }
+  
+  body {
+    @apply bg-gray-50 text-gray-900;
+  }
+}
+
+@layer components {
+  .btn-primary {
+    @apply bg-primary-600 hover:bg-primary-700 text-white font-medium py-2 px-4 rounded-lg transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2;
+  }
+  
+  .btn-secondary {
+    @apply bg-gray-200 hover:bg-gray-300 text-gray-900 font-medium py-2 px-4 rounded-lg transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2;
+  }
+  
+  .btn-success {
+    @apply bg-success-600 hover:bg-success-700 text-white font-medium py-2 px-4 rounded-lg transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-success-500 focus:ring-offset-2;
+  }
+  
+  .btn-danger {
+    @apply bg-danger-600 hover:bg-danger-700 text-white font-medium py-2 px-4 rounded-lg transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-danger-500 focus:ring-offset-2;
+  }
+  
+  .card {
+    @apply bg-white rounded-xl shadow-sm border border-gray-200 p-6;
+  }
+  
+  .input-field {
+    @apply w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent;
+  }
+  
+  .metric-card {
+    @apply bg-white rounded-lg p-4 shadow-sm border border-gray-200;
+  }
+  
+  .loading-spinner {
+    @apply animate-spin rounded-full h-6 w-6 border-b-2 border-primary-600;
+  }
+}
+
+@layer utilities {
+  .text-gradient {
+    @apply bg-gradient-to-r from-primary-600 to-primary-800 bg-clip-text text-transparent;
+  }
+  
+  .glass-effect {
+    @apply backdrop-blur-sm bg-white/80 border border-white/20;
+  }
+} 

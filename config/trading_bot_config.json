@@ -1,0 +1,58 @@
+{
+  "bot_settings": {
+    "initial_capital": 100000.0,
+    "trading_interval": 300,
+    "max_position_size": 0.1,
+    "max_daily_loss": 0.05,
+    "default_watchlist": ["AAPL", "GOOGL", "MSFT", "TSLA", "AMZN", "NVDA", "META", "NFLX"]
+  },
+  "strategies": {
+    "momentum": {
+      "enabled": true,
+      "parameters": {
+        "lookback_period": 20,
+        "momentum_threshold": 0.02
+      }
+    },
+    "mean_reversion": {
+      "enabled": true,
+      "parameters": {
+        "lookback_period": 20,
+        "std_threshold": 2.0
+      }
+    },
+    "rsi": {
+      "enabled": true,
+      "parameters": {
+        "lookback_period": 14,
+        "oversold_threshold": 30,
+        "overbought_threshold": 70
+      }
+    }
+  },
+  "risk_management": {
+    "max_positions": 10,
+    "position_size_method": "fixed_percentage",
+    "stop_loss_percentage": 0.05,
+    "take_profit_percentage": 0.10,
+    "max_correlation": 0.7
+  },
+  "data_settings": {
+    "data_provider": "yfinance",
+    "update_frequency": 60,
+    "historical_period": "3mo",
+    "cache_duration": 300
+  },
+  "logging": {
+    "level": "INFO",
+    "file": "trading_bot.log",
+    "max_size": "10MB",
+    "backup_count": 5
+  },
+  "dashboard": {
+    "host": "0.0.0.0",
+    "port": 5000,
+    "debug": false,
+    "update_interval": 30
+  }
+}

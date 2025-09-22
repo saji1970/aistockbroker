@@ -1,0 +1,221 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  backend-tests:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Set up Python 3.8
+      uses: actions/setup-python@v4
+      with:
+        python-version: 3.8
+    
+    - name: Cache pip dependencies
+      uses: actions/cache@v3
+      with:
+        path: ~/.cache/pip
+        key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
+        restore-keys: |
+          ${{ runner.os }}-pip-
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install -r requirements-dev.txt
+    
+    - name: Lint with flake8
+      run: |
+        flake8 backend/ --count --select=E9,F63,F7,F82 --show-source --statistics
+        flake8 backend/ --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
+    
+    - name: Format check with black
+      run: |
+        black --check backend/
+    
+    - name: Type check with mypy
+      run: |
+        mypy backend/ --ignore-missing-imports
+    
+    - name: Security check with bandit
+      run: |
+        bandit -r backend/ -f json -o bandit-report.json || true
+    
+    - name: Run tests
+      run: |
+        pytest backend/tests/ --cov=backend --cov-report=xml --cov-report=html
+    
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@v3
+      with:
+        file: ./coverage.xml
+        flags: backend
+        name: backend-coverage
+
+  frontend-tests:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Set up Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: '16'
+        cache: 'npm'
+        cache-dependency-path: frontend/package-lock.json
+    
+    - name: Install dependencies
+      run: |
+        cd frontend
+        npm ci
+    
+    - name: Lint
+      run: |
+        cd frontend
+        npm run lint
+    
+    - name: Type check
+      run: |
+        cd frontend
+        npm run type-check
+    
+    - name: Run tests
+      run: |
+        cd frontend
+        npm test -- --coverage --watchAll=false
+    
+    - name: Build
+      run: |
+        cd frontend
+        npm run build
+
+  mobile-tests:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Set up Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: '16'
+        cache: 'npm'
+        cache-dependency-path: mobile/AIStockTradingMobile/package-lock.json
+    
+    - name: Install dependencies
+      run: |
+        cd mobile/AIStockTradingMobile
+        npm ci
+    
+    - name: Lint
+      run: |
+        cd mobile/AIStockTradingMobile
+        npm run lint
+    
+    - name: Run tests
+      run: |
+        cd mobile/AIStockTradingMobile
+        npm test -- --coverage --watchAll=false
+
+  security-scan:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Run Trivy vulnerability scanner
+      uses: aquasecurity/trivy-action@master
+      with:
+        scan-type: 'fs'
+        scan-ref: '.'
+        format: 'sarif'
+        output: 'trivy-results.sarif'
+    
+    - name: Upload Trivy scan results to GitHub Security tab
+      uses: github/codeql-action/upload-sarif@v2
+      if: always()
+      with:
+        sarif_file: 'trivy-results.sarif'
+
+  build-and-deploy:
+    needs: [backend-tests, frontend-tests, mobile-tests, security-scan]
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Set up Python 3.8
+      uses: actions/setup-python@v4
+      with:
+        python-version: 3.8
+    
+    - name: Set up Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: '16'
+        cache: 'npm'
+    
+    - name: Install Python dependencies
+      run: |
+        pip install -r requirements.txt
+    
+    - name: Install Node.js dependencies
+      run: |
+        cd frontend && npm ci
+        cd ../mobile/AIStockTradingMobile && npm ci
+    
+    - name: Build frontend
+      run: |
+        cd frontend
+        npm run build
+    
+    - name: Build mobile app
+      run: |
+        cd mobile/AIStockTradingMobile
+        npm run build:android
+    
+    - name: Set up Google Cloud SDK
+      uses: google-github-actions/setup-gcloud@v1
+      with:
+        service_account_key: ${{ secrets.GCP_SA_KEY }}
+        project_id: ${{ secrets.GCP_PROJECT_ID }}
+    
+    - name: Configure Docker
+      run: gcloud auth configure-docker
+    
+    - name: Build and push Docker images
+      run: |
+        docker build -f deployment/Dockerfile -t gcr.io/${{ secrets.GCP_PROJECT_ID }}/ai-stock-trading:${{ github.sha }} .
+        docker push gcr.io/${{ secrets.GCP_PROJECT_ID }}/ai-stock-trading:${{ github.sha }}
+    
+    - name: Deploy to Cloud Run
+      run: |
+        gcloud run deploy ai-stock-trading \
+          --image gcr.io/${{ secrets.GCP_PROJECT_ID }}/ai-stock-trading:${{ github.sha }} \
+          --platform managed \
+          --region us-central1 \
+          --allow-unauthenticated
+
+  notify:
+    needs: [build-and-deploy]
+    runs-on: ubuntu-latest
+    if: always()
+    
+    steps:
+    - name: Notify deployment status
+      uses: 8398a7/action-slack@v3
+      with:
+        status: ${{ job.status }}
+        channel: '#deployments'
+        webhook_url: ${{ secrets.SLACK_WEBHOOK }}
+      if: always()

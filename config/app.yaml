@@ -1,0 +1,22 @@
+runtime: python39
+
+env_variables:
+  FLASK_ENV: production
+  PORT: 8080
+
+automatic_scaling:
+  min_instances: 1
+  max_instances: 10
+  target_cpu_utilization: 0.6
+
+handlers:
+  # Serve static files from the build directory
+  - url: /static
+    static_dir: build/static
+    secure: always
+
+  - url: /.*
+    script: auto
+    secure: always
+
+# Files are ignored using .gcloudignore file

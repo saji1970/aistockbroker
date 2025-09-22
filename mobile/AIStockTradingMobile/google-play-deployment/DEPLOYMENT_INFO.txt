@@ -1,0 +1,29 @@
+AI Stock Trading Mobile - Google Play Store Deployment
+
+Generated: Mon Aug  4 19:24:01 EDT 2025
+AAB File: app-release.aab
+Size:  20M
+
+NEXT STEPS:
+1. Go to Google Play Console: https://play.google.com/console
+2. Create a new app or update existing app
+3. Upload the AAB file: app-release.aab
+4. Complete app information (description, screenshots, etc.)
+5. Submit for review
+
+APP INFORMATION:
+- App Name: AI Stock Trading
+- Version: 1.0.0
+- Package: com.aistocktradingmobile
+- Minimum SDK: 23 (Android 6.0)
+- Target SDK: 34 (Android 14)
+
+FEATURES:
+- Real-time stock data and charts
+- AI-powered predictions
+- Portfolio management
+- Multi-market support (8 countries)
+- Technical analysis
+- Natural language AI assistant
+
+For detailed instructions, see: GOOGLE_PLAY_DEPLOYMENT.md

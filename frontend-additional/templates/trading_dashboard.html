@@ -1,0 +1,433 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Trading Bot Dashboard</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
+</head>
+<body class="bg-gray-100">
+    <div class="min-h-screen">
+        <!-- Header -->
+        <header class="bg-white shadow-sm border-b">
+            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                <div class="flex justify-between items-center py-4">
+                    <div class="flex items-center">
+                        <h1 class="text-2xl font-bold text-gray-900">AI Trading Bot Dashboard</h1>
+                        <span id="status-badge" class="ml-3 px-2 py-1 text-xs font-semibold rounded-full bg-gray-200 text-gray-800">
+                            Stopped
+                        </span>
+                    </div>
+                    <div class="flex space-x-3">
+                        <button id="start-btn" onclick="startBot()" 
+                                class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-md text-sm font-medium">
+                            Start Bot
+                        </button>
+                        <button id="stop-btn" onclick="stopBot()" 
+                                class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-md text-sm font-medium" disabled>
+                            Stop Bot
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+            <!-- Performance Overview -->
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+                <div class="bg-white rounded-lg shadow p-6">
+                    <div class="flex items-center">
+                        <div class="flex-shrink-0">
+                            <div class="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center">
+                                <span class="text-white text-sm font-bold">$</span>
+                            </div>
+                        </div>
+                        <div class="ml-4">
+                            <p class="text-sm font-medium text-gray-500">Portfolio Value</p>
+                            <p id="portfolio-value" class="text-2xl font-semibold text-gray-900">$0</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="bg-white rounded-lg shadow p-6">
+                    <div class="flex items-center">
+                        <div class="flex-shrink-0">
+                            <div class="w-8 h-8 bg-green-500 rounded-full flex items-center justify-center">
+                                <span class="text-white text-sm font-bold">%</span>
+                            </div>
+                        </div>
+                        <div class="ml-4">
+                            <p class="text-sm font-medium text-gray-500">Total Return</p>
+                            <p id="total-return" class="text-2xl font-semibold text-gray-900">0%</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="bg-white rounded-lg shadow p-6">
+                    <div class="flex items-center">
+                        <div class="flex-shrink-0">
+                            <div class="w-8 h-8 bg-yellow-500 rounded-full flex items-center justify-center">
+                                <span class="text-white text-sm font-bold">C</span>
+                            </div>
+                        </div>
+                        <div class="ml-4">
+                            <p class="text-sm font-medium text-gray-500">Cash</p>
+                            <p id="cash" class="text-2xl font-semibold text-gray-900">$0</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="bg-white rounded-lg shadow p-6">
+                    <div class="flex items-center">
+                        <div class="flex-shrink-0">
+                            <div class="w-8 h-8 bg-purple-500 rounded-full flex items-center justify-center">
+                                <span class="text-white text-sm font-bold">P</span>
+                            </div>
+                        </div>
+                        <div class="ml-4">
+                            <p class="text-sm font-medium text-gray-500">Positions</p>
+                            <p id="positions-count" class="text-2xl font-semibold text-gray-900">0</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Charts and Data -->
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
+                <!-- Portfolio Value Chart -->
+                <div class="bg-white rounded-lg shadow p-6">
+                    <h3 class="text-lg font-medium text-gray-900 mb-4">Portfolio Value Over Time</h3>
+                    <canvas id="portfolio-chart" width="400" height="200"></canvas>
+                </div>
+
+                <!-- Recent Orders -->
+                <div class="bg-white rounded-lg shadow p-6">
+                    <h3 class="text-lg font-medium text-gray-900 mb-4">Recent Orders</h3>
+                    <div id="orders-list" class="space-y-3 max-h-64 overflow-y-auto">
+                        <p class="text-gray-500 text-center">No orders yet</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Positions and Watchlist -->
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                <!-- Current Positions -->
+                <div class="bg-white rounded-lg shadow p-6">
+                    <h3 class="text-lg font-medium text-gray-900 mb-4">Current Positions</h3>
+                    <div id="positions-list" class="space-y-3">
+                        <p class="text-gray-500 text-center">No positions</p>
+                    </div>
+                </div>
+
+                <!-- Watchlist Management -->
+                <div class="bg-white rounded-lg shadow p-6">
+                    <h3 class="text-lg font-medium text-gray-900 mb-4">Watchlist</h3>
+                    <div class="mb-4">
+                        <div class="flex space-x-2">
+                            <input type="text" id="symbol-input" placeholder="Enter symbol (e.g., AAPL)" 
+                                   class="flex-1 border border-gray-300 rounded-md px-3 py-2 text-sm">
+                            <button onclick="addToWatchlist()" 
+                                    class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md text-sm">
+                                Add
+                            </button>
+                        </div>
+                    </div>
+                    <div id="watchlist-items" class="space-y-2">
+                        <p class="text-gray-500 text-center">No symbols in watchlist</p>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        let portfolioChart;
+        let updateInterval;
+
+        // Initialize chart
+        function initChart() {
+            const ctx = document.getElementById('portfolio-chart').getContext('2d');
+            portfolioChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: [],
+                    datasets: [{
+                        label: 'Portfolio Value',
+                        data: [],
+                        borderColor: 'rgb(59, 130, 246)',
+                        backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                        tension: 0.1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    scales: {
+                        y: {
+                            beginAtZero: false,
+                            ticks: {
+                                callback: function(value) {
+                                    return '$' + value.toLocaleString();
+                                }
+                            }
+                        }
+                    },
+                    plugins: {
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    return 'Value: $' + context.parsed.y.toLocaleString();
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // Update dashboard data
+        async function updateDashboard() {
+            try {
+                // Get portfolio data
+                const portfolioResponse = await fetch('/api/portfolio');
+                if (portfolioResponse.ok) {
+                    const portfolio = await portfolioResponse.json();
+                    updatePortfolioDisplay(portfolio);
+                }
+
+                // Get portfolio history
+                const historyResponse = await fetch('/api/portfolio/history');
+                if (historyResponse.ok) {
+                    const history = await historyResponse.json();
+                    updatePortfolioChart(history);
+                }
+
+                // Get orders
+                const ordersResponse = await fetch('/api/orders');
+                if (ordersResponse.ok) {
+                    const orders = await ordersResponse.json();
+                    updateOrdersDisplay(orders);
+                }
+
+                // Get watchlist
+                const watchlistResponse = await fetch('/api/watchlist');
+                if (watchlistResponse.ok) {
+                    const watchlist = await watchlistResponse.json();
+                    updateWatchlistDisplay(watchlist.watchlist);
+                }
+
+                // Get status
+                const statusResponse = await fetch('/api/status');
+                if (statusResponse.ok) {
+                    const status = await statusResponse.json();
+                    updateStatusDisplay(status);
+                }
+
+            } catch (error) {
+                console.error('Error updating dashboard:', error);
+            }
+        }
+
+        function updatePortfolioDisplay(portfolio) {
+            if (portfolio.total_value) {
+                document.getElementById('portfolio-value').textContent = 
+                    '$' + portfolio.total_value.toLocaleString();
+                document.getElementById('cash').textContent = 
+                    '$' + portfolio.cash.toLocaleString();
+                document.getElementById('positions-count').textContent = 
+                    Object.keys(portfolio.positions || {}).length;
+            }
+        }
+
+        function updatePortfolioChart(history) {
+            if (history.length > 0) {
+                const labels = history.map(h => new Date(h.timestamp).toLocaleTimeString());
+                const data = history.map(h => h.total_value);
+                
+                portfolioChart.data.labels = labels;
+                portfolioChart.data.datasets[0].data = data;
+                portfolioChart.update();
+            }
+        }
+
+        function updateOrdersDisplay(orders) {
+            const ordersList = document.getElementById('orders-list');
+            if (orders.length === 0) {
+                ordersList.innerHTML = '<p class="text-gray-500 text-center">No orders yet</p>';
+                return;
+            }
+
+            ordersList.innerHTML = orders.map(order => `
+                <div class="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                    <div class="flex items-center space-x-3">
+                        <span class="px-2 py-1 text-xs font-semibold rounded-full ${
+                            order.order_type === 'BUY' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                        }">
+                            ${order.order_type}
+                        </span>
+                        <span class="font-medium">${order.symbol}</span>
+                        <span class="text-sm text-gray-500">${order.quantity} shares</span>
+                    </div>
+                    <div class="text-right">
+                        <div class="font-medium">$${order.price.toFixed(2)}</div>
+                        <div class="text-xs text-gray-500">${new Date(order.timestamp).toLocaleTimeString()}</div>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function updateWatchlistDisplay(watchlist) {
+            const watchlistItems = document.getElementById('watchlist-items');
+            if (watchlist.length === 0) {
+                watchlistItems.innerHTML = '<p class="text-gray-500 text-center">No symbols in watchlist</p>';
+                return;
+            }
+
+            watchlistItems.innerHTML = watchlist.map(symbol => `
+                <div class="flex items-center justify-between p-2 bg-gray-50 rounded">
+                    <span class="font-medium">${symbol}</span>
+                    <button onclick="removeFromWatchlist('${symbol}')" 
+                            class="text-red-600 hover:text-red-800 text-sm">
+                        Remove
+                    </button>
+                </div>
+            `).join('');
+        }
+
+        function updateStatusDisplay(status) {
+            const statusBadge = document.getElementById('status-badge');
+            const startBtn = document.getElementById('start-btn');
+            const stopBtn = document.getElementById('stop-btn');
+
+            if (status.status === 'running') {
+                statusBadge.textContent = 'Running';
+                statusBadge.className = 'ml-3 px-2 py-1 text-xs font-semibold rounded-full bg-green-200 text-green-800';
+                startBtn.disabled = true;
+                stopBtn.disabled = false;
+            } else {
+                statusBadge.textContent = 'Stopped';
+                statusBadge.className = 'ml-3 px-2 py-1 text-xs font-semibold rounded-full bg-gray-200 text-gray-800';
+                startBtn.disabled = false;
+                stopBtn.disabled = true;
+            }
+        }
+
+        // Bot control functions
+        async function startBot() {
+            try {
+                const response = await fetch('/api/start', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        initial_capital: 100000
+                    })
+                });
+
+                if (response.ok) {
+                    alert('Trading bot started successfully!');
+                } else {
+                    const error = await response.json();
+                    alert('Error starting bot: ' + error.error);
+                }
+            } catch (error) {
+                alert('Error starting bot: ' + error.message);
+            }
+        }
+
+        async function stopBot() {
+            try {
+                const response = await fetch('/api/stop', {
+                    method: 'POST'
+                });
+
+                if (response.ok) {
+                    alert('Trading bot stopped successfully!');
+                } else {
+                    const error = await response.json();
+                    alert('Error stopping bot: ' + error.error);
+                }
+            } catch (error) {
+                alert('Error stopping bot: ' + error.message);
+            }
+        }
+
+        // Watchlist management
+        async function addToWatchlist() {
+            const symbolInput = document.getElementById('symbol-input');
+            const symbol = symbolInput.value.trim().toUpperCase();
+
+            if (!symbol) {
+                alert('Please enter a symbol');
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/watchlist', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        action: 'add',
+                        symbol: symbol
+                    })
+                });
+
+                if (response.ok) {
+                    symbolInput.value = '';
+                    updateDashboard();
+                } else {
+                    const error = await response.json();
+                    alert('Error adding symbol: ' + error.error);
+                }
+            } catch (error) {
+                alert('Error adding symbol: ' + error.message);
+            }
+        }
+
+        async function removeFromWatchlist(symbol) {
+            try {
+                const response = await fetch('/api/watchlist', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        action: 'remove',
+                        symbol: symbol
+                    })
+                });
+
+                if (response.ok) {
+                    updateDashboard();
+                } else {
+                    const error = await response.json();
+                    alert('Error removing symbol: ' + error.error);
+                }
+            } catch (error) {
+                alert('Error removing symbol: ' + error.message);
+            }
+        }
+
+        // Initialize dashboard
+        document.addEventListener('DOMContentLoaded', function() {
+            initChart();
+            updateDashboard();
+            
+            // Update dashboard every 30 seconds
+            updateInterval = setInterval(updateDashboard, 30000);
+        });
+
+        // Cleanup on page unload
+        window.addEventListener('beforeunload', function() {
+            if (updateInterval) {
+                clearInterval(updateInterval);
+            }
+        });
+    </script>
+</body>
+</html>
