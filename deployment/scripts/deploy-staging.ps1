@@ -8,7 +8,7 @@ param(
 )
 
 # Configuration
-$PROJECT_ID = if ($ProjectId) { $ProjectId } else { "your-project-id" }
+$PROJECT_ID = if ($ProjectId) { $ProjectId } else { "stockbroker-28983" }
 $REGION = $Region
 $ENVIRONMENT = $Environment
 $SERVICE_ACCOUNT_KEY = $env:GCP_SA_KEY

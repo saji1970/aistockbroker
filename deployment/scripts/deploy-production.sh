@@ -6,7 +6,7 @@
 set -e
 
 # Configuration
-PROJECT_ID=${GCP_PROJECT_ID:-"your-project-id"}
+PROJECT_ID=${GCP_PROJECT_ID:-"stockbroker-28983"}
 REGION=${GCP_REGION:-"us-central1"}
 ENVIRONMENT="production"
 SERVICE_ACCOUNT_KEY=${GCP_SA_KEY}
