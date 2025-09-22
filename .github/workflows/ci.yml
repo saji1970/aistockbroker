@@ -1,10 +1,30 @@
-name: CI/CD Pipeline
+name: AI Stock Trading System - CI/CD Pipeline
 
 on:
   push:
-    branches: [ main, develop ]
+    branches: [ master, develop, main ]
   pull_request:
-    branches: [ main ]
+    branches: [ master, main ]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Deployment environment'
+        required: true
+        default: 'staging'
+        type: choice
+        options:
+        - staging
+        - production
+      service:
+        description: 'Service to deploy'
+        required: true
+        default: 'all'
+        type: choice
+        options:
+        - all
+        - backend
+        - frontend
+        - trading-bot
 
 jobs:
   backend-tests:
@@ -146,10 +166,12 @@ jobs:
       with:
         sarif_file: 'trivy-results.sarif'
 
-  build-and-deploy:
-    needs: [backend-tests, frontend-tests, mobile-tests, security-scan]
+  # GCP Deployment Jobs
+  deploy-backend:
+    needs: [backend-tests, security-scan]
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
+    environment: ${{ github.event.inputs.environment || 'staging' }}
     
     steps:
     - uses: actions/checkout@v3
@@ -159,63 +181,213 @@ jobs:
       with:
         python-version: 3.8
     
+    - name: Set up Google Cloud SDK
+      uses: google-github-actions/setup-gcloud@v1
+      with:
+        service_account_key: ${{ secrets.GCP_SA_KEY }}
+        project_id: ${{ secrets.GCP_PROJECT_ID }}
+        export_default_credentials: true
+    
+    - name: Configure Docker for GCR
+      run: gcloud auth configure-docker
+    
+    - name: Build Backend Docker Image
+      run: |
+        docker build -f deployment/Dockerfile.api-server \
+          -t gcr.io/${{ secrets.GCP_PROJECT_ID }}/ai-stock-backend:${{ github.sha }} \
+          -t gcr.io/${{ secrets.GCP_PROJECT_ID }}/ai-stock-backend:latest \
+          .
+    
+    - name: Push Backend Image to GCR
+      run: |
+        docker push gcr.io/${{ secrets.GCP_PROJECT_ID }}/ai-stock-backend:${{ github.sha }}
+        docker push gcr.io/${{ secrets.GCP_PROJECT_ID }}/ai-stock-backend:latest
+    
+    - name: Deploy Backend to Cloud Run
+      run: |
+        gcloud run deploy ai-stock-backend \
+          --image gcr.io/${{ secrets.GCP_PROJECT_ID }}/ai-stock-backend:${{ github.sha }} \
+          --platform managed \
+          --region us-central1 \
+          --allow-unauthenticated \
+          --set-env-vars="GOOGLE_API_KEY=${{ secrets.GOOGLE_API_KEY }}" \
+          --set-env-vars="ALPHA_VANTAGE_API_KEY=${{ secrets.ALPHA_VANTAGE_API_KEY }}" \
+          --set-env-vars="FINNHUB_API_KEY=${{ secrets.FINNHUB_API_KEY }}" \
+          --set-env-vars="MARKETSTACK_API_KEY=${{ secrets.MARKETSTACK_API_KEY }}" \
+          --memory=2Gi \
+          --cpu=2 \
+          --max-instances=10 \
+          --min-instances=1
+
+  deploy-frontend:
+    needs: [frontend-tests, security-scan]
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
+    environment: ${{ github.event.inputs.environment || 'staging' }}
+    
+    steps:
+    - uses: actions/checkout@v3
+    
     - name: Set up Node.js
       uses: actions/setup-node@v3
       with:
         node-version: '16'
         cache: 'npm'
+        cache-dependency-path: frontend/package-lock.json
     
-    - name: Install Python dependencies
+    - name: Install Frontend Dependencies
       run: |
-        pip install -r requirements.txt
+        cd frontend
+        npm ci
     
-    - name: Install Node.js dependencies
-      run: |
-        cd frontend && npm ci
-        cd ../mobile/AIStockTradingMobile && npm ci
-    
-    - name: Build frontend
+    - name: Build Frontend
       run: |
         cd frontend
         npm run build
-    
-    - name: Build mobile app
-      run: |
-        cd mobile/AIStockTradingMobile
-        npm run build:android
     
     - name: Set up Google Cloud SDK
       uses: google-github-actions/setup-gcloud@v1
       with:
         service_account_key: ${{ secrets.GCP_SA_KEY }}
         project_id: ${{ secrets.GCP_PROJECT_ID }}
+        export_default_credentials: true
     
-    - name: Configure Docker
+    - name: Configure Docker for GCR
       run: gcloud auth configure-docker
     
-    - name: Build and push Docker images
+    - name: Build Frontend Docker Image
       run: |
-        docker build -f deployment/Dockerfile -t gcr.io/${{ secrets.GCP_PROJECT_ID }}/ai-stock-trading:${{ github.sha }} .
-        docker push gcr.io/${{ secrets.GCP_PROJECT_ID }}/ai-stock-trading:${{ github.sha }}
+        docker build -f deployment/Dockerfile.frontend \
+          -t gcr.io/${{ secrets.GCP_PROJECT_ID }}/ai-stock-frontend:${{ github.sha }} \
+          -t gcr.io/${{ secrets.GCP_PROJECT_ID }}/ai-stock-frontend:latest \
+          .
     
-    - name: Deploy to Cloud Run
+    - name: Push Frontend Image to GCR
       run: |
-        gcloud run deploy ai-stock-trading \
-          --image gcr.io/${{ secrets.GCP_PROJECT_ID }}/ai-stock-trading:${{ github.sha }} \
+        docker push gcr.io/${{ secrets.GCP_PROJECT_ID }}/ai-stock-frontend:${{ github.sha }}
+        docker push gcr.io/${{ secrets.GCP_PROJECT_ID }}/ai-stock-frontend:latest
+    
+    - name: Deploy Frontend to Cloud Run
+      run: |
+        gcloud run deploy ai-stock-frontend \
+          --image gcr.io/${{ secrets.GCP_PROJECT_ID }}/ai-stock-frontend:${{ github.sha }} \
           --platform managed \
           --region us-central1 \
-          --allow-unauthenticated
+          --allow-unauthenticated \
+          --set-env-vars="REACT_APP_API_URL=https://ai-stock-backend-xxxxx-uc.a.run.app" \
+          --memory=1Gi \
+          --cpu=1 \
+          --max-instances=5 \
+          --min-instances=0
+
+  deploy-trading-bot:
+    needs: [backend-tests, security-scan]
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
+    environment: ${{ github.event.inputs.environment || 'staging' }}
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Set up Python 3.8
+      uses: actions/setup-python@v4
+      with:
+        python-version: 3.8
+    
+    - name: Set up Google Cloud SDK
+      uses: google-github-actions/setup-gcloud@v1
+      with:
+        service_account_key: ${{ secrets.GCP_SA_KEY }}
+        project_id: ${{ secrets.GCP_PROJECT_ID }}
+        export_default_credentials: true
+    
+    - name: Configure Docker for GCR
+      run: gcloud auth configure-docker
+    
+    - name: Build Trading Bot Docker Image
+      run: |
+        docker build -f deployment/Dockerfile.trading-bot \
+          -t gcr.io/${{ secrets.GCP_PROJECT_ID }}/ai-stock-trading-bot:${{ github.sha }} \
+          -t gcr.io/${{ secrets.GCP_PROJECT_ID }}/ai-stock-trading-bot:latest \
+          .
+    
+    - name: Push Trading Bot Image to GCR
+      run: |
+        docker push gcr.io/${{ secrets.GCP_PROJECT_ID }}/ai-stock-trading-bot:${{ github.sha }}
+        docker push gcr.io/${{ secrets.GCP_PROJECT_ID }}/ai-stock-trading-bot:latest
+    
+    - name: Deploy Trading Bot to Cloud Run
+      run: |
+        gcloud run deploy ai-stock-trading-bot \
+          --image gcr.io/${{ secrets.GCP_PROJECT_ID }}/ai-stock-trading-bot:${{ github.sha }} \
+          --platform managed \
+          --region us-central1 \
+          --no-allow-unauthenticated \
+          --set-env-vars="GOOGLE_API_KEY=${{ secrets.GOOGLE_API_KEY }}" \
+          --set-env-vars="ALPHA_VANTAGE_API_KEY=${{ secrets.ALPHA_VANTAGE_API_KEY }}" \
+          --memory=2Gi \
+          --cpu=2 \
+          --max-instances=3 \
+          --min-instances=0
+
+  deploy-infrastructure:
+    needs: [deploy-backend, deploy-frontend, deploy-trading-bot]
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
+    environment: ${{ github.event.inputs.environment || 'staging' }}
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Set up Google Cloud SDK
+      uses: google-github-actions/setup-gcloud@v1
+      with:
+        service_account_key: ${{ secrets.GCP_SA_KEY }}
+        project_id: ${{ secrets.GCP_PROJECT_ID }}
+        export_default_credentials: true
+    
+    - name: Deploy Infrastructure
+      run: |
+        # Create Cloud Storage bucket for data
+        gsutil mb -p ${{ secrets.GCP_PROJECT_ID }} -c STANDARD -l us-central1 gs://${{ secrets.GCP_PROJECT_ID }}-ai-stock-data || true
+        
+        # Set up Cloud Scheduler for trading bot
+        gcloud scheduler jobs create http ai-stock-trading-scheduler \
+          --schedule="0 9 * * 1-5" \
+          --uri="https://ai-stock-trading-bot-xxxxx-uc.a.run.app/start-trading" \
+          --http-method=POST \
+          --oidc-service-account-email=${{ secrets.GCP_SA_EMAIL }} \
+          --oidc-token-audience="https://ai-stock-trading-bot-xxxxx-uc.a.run.app" || true
+    
+    - name: Update DNS and Load Balancer
+      run: |
+        # Configure custom domain (if available)
+        if [ -n "${{ secrets.CUSTOM_DOMAIN }}" ]; then
+          gcloud run domain-mappings create \
+            --service ai-stock-frontend \
+            --domain ${{ secrets.CUSTOM_DOMAIN }} \
+            --region us-central1 || true
+        fi
 
   notify:
-    needs: [build-and-deploy]
+    needs: [deploy-infrastructure]
     runs-on: ubuntu-latest
     if: always()
     
     steps:
+    - name: Deployment Status Summary
+      run: |
+        echo "🚀 AI Stock Trading System Deployment Complete!"
+        echo "📊 Backend: https://ai-stock-backend-xxxxx-uc.a.run.app"
+        echo "🌐 Frontend: https://ai-stock-frontend-xxxxx-uc.a.run.app"
+        echo "🤖 Trading Bot: https://ai-stock-trading-bot-xxxxx-uc.a.run.app"
+        echo "📈 Environment: ${{ github.event.inputs.environment || 'staging' }}"
+    
     - name: Notify deployment status
       uses: 8398a7/action-slack@v3
       with:
         status: ${{ job.status }}
         channel: '#deployments'
         webhook_url: ${{ secrets.SLACK_WEBHOOK }}
-      if: always()
+        fields: repo,message,commit,author,action,eventName,ref,workflow
+      if: always() && secrets.SLACK_WEBHOOK

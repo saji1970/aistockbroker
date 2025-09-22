@@ -1,0 +1,154 @@
+name: Production Deployment
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm_production:
+        description: 'Type "DEPLOY TO PRODUCTION" to confirm'
+        required: true
+        type: string
+      version:
+        description: 'Version tag to deploy'
+        required: true
+        default: 'latest'
+        type: string
+
+jobs:
+  validate-production-deployment:
+    runs-on: ubuntu-latest
+    if: github.event.inputs.confirm_production == 'DEPLOY TO PRODUCTION'
+    
+    steps:
+    - name: Validate Production Deployment
+      run: |
+        echo "✅ Production deployment confirmed"
+        echo "📦 Version: ${{ github.event.inputs.version }}"
+        echo "🚀 Starting production deployment..."
+
+  deploy-production:
+    needs: validate-production-deployment
+    runs-on: ubuntu-latest
+    environment: production
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Set up Python 3.8
+      uses: actions/setup-python@v4
+      with:
+        python-version: 3.8
+    
+    - name: Set up Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: '16'
+        cache: 'npm'
+        cache-dependency-path: frontend/package-lock.json
+    
+    - name: Set up Google Cloud SDK
+      uses: google-github-actions/setup-gcloud@v1
+      with:
+        service_account_key: ${{ secrets.GCP_SA_KEY }}
+        project_id: ${{ secrets.GCP_PROJECT_ID }}
+        export_default_credentials: true
+    
+    - name: Configure Docker for GCR
+      run: gcloud auth configure-docker
+    
+    - name: Build and Deploy Backend
+      run: |
+        docker build -f deployment/Dockerfile.api-server \
+          -t gcr.io/${{ secrets.GCP_PROJECT_ID }}/ai-stock-backend:${{ github.event.inputs.version }} \
+          -t gcr.io/${{ secrets.GCP_PROJECT_ID }}/ai-stock-backend:latest \
+          .
+        docker push gcr.io/${{ secrets.GCP_PROJECT_ID }}/ai-stock-backend:${{ github.event.inputs.version }}
+        docker push gcr.io/${{ secrets.GCP_PROJECT_ID }}/ai-stock-backend:latest
+        
+        gcloud run deploy ai-stock-backend-prod \
+          --image gcr.io/${{ secrets.GCP_PROJECT_ID }}/ai-stock-backend:${{ github.event.inputs.version }} \
+          --platform managed \
+          --region us-central1 \
+          --allow-unauthenticated \
+          --set-env-vars="GOOGLE_API_KEY=${{ secrets.GOOGLE_API_KEY }}" \
+          --set-env-vars="ALPHA_VANTAGE_API_KEY=${{ secrets.ALPHA_VANTAGE_API_KEY }}" \
+          --set-env-vars="FINNHUB_API_KEY=${{ secrets.FINNHUB_API_KEY }}" \
+          --set-env-vars="MARKETSTACK_API_KEY=${{ secrets.MARKETSTACK_API_KEY }}" \
+          --memory=4Gi \
+          --cpu=4 \
+          --max-instances=20 \
+          --min-instances=2
+    
+    - name: Build and Deploy Frontend
+      run: |
+        cd frontend
+        npm ci
+        npm run build
+        
+        docker build -f ../deployment/Dockerfile.frontend \
+          -t gcr.io/${{ secrets.GCP_PROJECT_ID }}/ai-stock-frontend:${{ github.event.inputs.version }} \
+          -t gcr.io/${{ secrets.GCP_PROJECT_ID }}/ai-stock-frontend:latest \
+          .
+        docker push gcr.io/${{ secrets.GCP_PROJECT_ID }}/ai-stock-frontend:${{ github.event.inputs.version }}
+        docker push gcr.io/${{ secrets.GCP_PROJECT_ID }}/ai-stock-frontend:latest
+        
+        gcloud run deploy ai-stock-frontend-prod \
+          --image gcr.io/${{ secrets.GCP_PROJECT_ID }}/ai-stock-frontend:${{ github.event.inputs.version }} \
+          --platform managed \
+          --region us-central1 \
+          --allow-unauthenticated \
+          --set-env-vars="REACT_APP_API_URL=https://ai-stock-backend-prod-xxxxx-uc.a.run.app" \
+          --memory=2Gi \
+          --cpu=2 \
+          --max-instances=10 \
+          --min-instances=1
+    
+    - name: Build and Deploy Trading Bot
+      run: |
+        docker build -f deployment/Dockerfile.trading-bot \
+          -t gcr.io/${{ secrets.GCP_PROJECT_ID }}/ai-stock-trading-bot:${{ github.event.inputs.version }} \
+          -t gcr.io/${{ secrets.GCP_PROJECT_ID }}/ai-stock-trading-bot:latest \
+          .
+        docker push gcr.io/${{ secrets.GCP_PROJECT_ID }}/ai-stock-trading-bot:${{ github.event.inputs.version }}
+        docker push gcr.io/${{ secrets.GCP_PROJECT_ID }}/ai-stock-trading-bot:latest
+        
+        gcloud run deploy ai-stock-trading-bot-prod \
+          --image gcr.io/${{ secrets.GCP_PROJECT_ID }}/ai-stock-trading-bot:${{ github.event.inputs.version }} \
+          --platform managed \
+          --region us-central1 \
+          --no-allow-unauthenticated \
+          --set-env-vars="GOOGLE_API_KEY=${{ secrets.GOOGLE_API_KEY }}" \
+          --set-env-vars="ALPHA_VANTAGE_API_KEY=${{ secrets.ALPHA_VANTAGE_API_KEY }}" \
+          --memory=4Gi \
+          --cpu=4 \
+          --max-instances=5 \
+          --min-instances=1
+    
+    - name: Set up Production Infrastructure
+      run: |
+        # Create production Cloud Storage bucket
+        gsutil mb -p ${{ secrets.GCP_PROJECT_ID }} -c STANDARD -l us-central1 gs://${{ secrets.GCP_PROJECT_ID }}-ai-stock-prod-data || true
+        
+        # Set up production Cloud Scheduler
+        gcloud scheduler jobs create http ai-stock-trading-scheduler-prod \
+          --schedule="0 9 * * 1-5" \
+          --uri="https://ai-stock-trading-bot-prod-xxxxx-uc.a.run.app/start-trading" \
+          --http-method=POST \
+          --oidc-service-account-email=${{ secrets.GCP_SA_EMAIL }} \
+          --oidc-token-audience="https://ai-stock-trading-bot-prod-xxxxx-uc.a.run.app" || true
+        
+        # Configure custom domain for production
+        if [ -n "${{ secrets.PRODUCTION_DOMAIN }}" ]; then
+          gcloud run domain-mappings create \
+            --service ai-stock-frontend-prod \
+            --domain ${{ secrets.PRODUCTION_DOMAIN }} \
+            --region us-central1 || true
+        fi
+    
+    - name: Production Deployment Complete
+      run: |
+        echo "🎉 Production Deployment Complete!"
+        echo "📊 Backend: https://ai-stock-backend-prod-xxxxx-uc.a.run.app"
+        echo "🌐 Frontend: https://ai-stock-frontend-prod-xxxxx-uc.a.run.app"
+        echo "🤖 Trading Bot: https://ai-stock-trading-bot-prod-xxxxx-uc.a.run.app"
+        echo "📈 Version: ${{ github.event.inputs.version }}"
+        echo "🔒 Environment: Production"
