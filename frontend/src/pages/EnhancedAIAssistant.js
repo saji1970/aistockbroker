@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { PaperAirplaneIcon, GlobeAltIcon, SparklesIcon, BrainIcon } from '@heroicons/react/24/outline';
+import { PaperAirplaneIcon, GlobeAltIcon, SparklesIcon, CpuChipIcon } from '@heroicons/react/24/outline';
 import ReactMarkdown from 'react-markdown';
 import { dayTradingAPI, predictionAPI, stockAPI } from '../services/api';
 import { useStore } from '../store/store';
@@ -696,7 +696,7 @@ Welcome to the **next-generation AI trading assistant** powered by advanced Hugg
       <div className="bg-white border-b border-gray-200 px-4 sm:px-6 py-3 sm:py-4">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between space-y-2 sm:space-y-0">
           <div className="flex items-center space-x-2">
-            <BrainIcon className="w-6 h-6 text-blue-600" />
+            <CpuChipIcon className="w-6 h-6 text-blue-600" />
             <div>
               <h1 className="text-lg sm:text-xl font-semibold text-gray-900">Enhanced AI Trading Assistant</h1>
               <p className="text-xs sm:text-sm text-gray-600">Powered by advanced Hugging Face models</p>

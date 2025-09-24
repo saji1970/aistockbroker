@@ -1,6 +1,6 @@
 // API Configuration
-export const API_BASE_URL = 'https://ai-stock-trading-simple-720013332324.us-central1.run.app';
-export const TRADING_BOT_API_URL = 'https://ai-stock-trading-simple-720013332324.us-central1.run.app';
+export const API_BASE_URL = 'http://localhost:8080';
+export const TRADING_BOT_API_URL = 'http://localhost:8080';
 
 // API Endpoints
 export const API_ENDPOINTS = {

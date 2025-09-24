@@ -5,8 +5,14 @@ Provides REST API endpoints for the React frontend
 """
 
 import os
-# Set environment variables first
-os.environ['GOOGLE_API_KEY'] = 'AIzaSyBGgBC9HhFBImN16B1W3tCIsK8W7GMNOMQ'
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
+
+# Validate required environment variables
+if not os.environ.get('GOOGLE_API_KEY'):
+    raise ValueError("GOOGLE_API_KEY environment variable is required. Please set it in your .env file or environment.")
 
 from flask import Flask, request, jsonify
 from flask_cors import CORS
@@ -32,13 +38,63 @@ from config import Config
 from sensitivity_analysis import SensitivityAnalyzer
 from technical_analysis import TechnicalAnalyzer
 from data_fetcher import data_fetcher
+from shadow_trading_bot import ShadowTradingBot
+import threading
+import time
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# Initialize database
+from database import init_database
+try:
+    init_database()
+    logger.info("Database initialized successfully")
+except Exception as e:
+    logger.error(f"Failed to initialize database: {e}")
+
 app = Flask(__name__)
-CORS(app)  # Enable CORS for React frontend
+
+# Enhanced CORS configuration for GCP deployment
+cors_origins = [
+    "http://localhost:3000",  # Local development
+    "http://localhost:8080",  # Local API
+    "https://*.appspot.com",  # GCP App Engine
+    "https://*.web.app",      # Firebase Hosting
+    "https://*.firebaseapp.com",  # Firebase Hosting
+]
+
+# Add custom domain if specified
+if os.environ.get('FRONTEND_URL'):
+    cors_origins.append(os.environ.get('FRONTEND_URL'))
+
+CORS(app,
+     origins=cors_origins,
+     allow_headers=["Content-Type", "Authorization", "X-CSRF-Token", "x-access-token", "X-Access-Token"],
+     methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"])
+
+# Register user management blueprints
+from routes import auth_bp, user_bp
+from routes.agent_routes import agent_bp
+from middleware.trading_auth import trading_auth, trading_access_required, require_trade_permission
+app.register_blueprint(auth_bp)
+app.register_blueprint(user_bp)
+app.register_blueprint(agent_bp)
+
+# Global trading bot instance
+trading_bot_instance = None
+trading_bot_thread = None
+bot_status = {
+    'status': 'stopped',
+    'bot_active': False,
+    'last_update': datetime.now().isoformat(),
+    'message': 'Trading bot is ready to start',
+    'portfolio_value': 0.0,
+    'milestone_progress': 0.0,
+    'daily_trades': 0,
+    'total_orders': 0
+}
 
 def convert_numpy_types(obj):
     """Convert numpy types and custom objects to native Python types for JSON serialization"""
@@ -315,6 +371,24 @@ def health_check():
         'timestamp': datetime.now().isoformat(),
         'ai_predictor_available': predictor is not None
     })
+
+@app.route('/api/trading/access', methods=['GET'])
+def get_trading_access():
+    """Get trading access information"""
+    try:
+        return jsonify({
+            'trading_enabled': True,
+            'demo_mode': True,
+            'access_tokens': {
+                'admin': 'admin_access_token_123',
+                'trader': 'trader_access_token_456',
+                'customer': 'customer_access_token_789'
+            },
+            'message': 'Trading access is available. Use any access token to enable trading features.',
+            'status': 'available'
+        }), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 # Stock data endpoints (legacy - keeping for compatibility)
 @app.route('/api/stock/data', methods=['GET'])
@@ -793,10 +867,36 @@ def initialize_portfolio():
 
 @app.route('/api/portfolio', methods=['GET'])
 def get_portfolio():
-    """Get current portfolio state."""
+    """Get current portfolio state - prioritize shadow trading bot if active."""
+    global trading_bot_instance, bot_status
     try:
-        portfolio_data = portfolio_manager.get_portfolio_summary()
-        return jsonify(portfolio_data)
+        # If shadow trading bot is active, return its portfolio data
+        if trading_bot_instance and bot_status['bot_active']:
+            portfolio_data = {
+                'total_value': trading_bot_instance.portfolio.total_value,
+                'cash': trading_bot_instance.portfolio.cash,
+                'positions': {symbol: {
+                    'symbol': pos.symbol,
+                    'quantity': pos.quantity,
+                    'avg_price': pos.avg_price,
+                    'current_price': pos.current_price,
+                    'unrealized_pnl': pos.unrealized_pnl,
+                    'market_value': pos.market_value
+                } for symbol, pos in trading_bot_instance.portfolio.positions.items()},
+                'milestone_progress': trading_bot_instance.portfolio.milestone_progress,
+                'target_amount': trading_bot_instance.portfolio.target_amount,
+                'daily_trades': len(trading_bot_instance.portfolio.daily_trades),
+                'total_orders': len(trading_bot_instance.portfolio.orders),
+                'strategy': trading_bot_instance.trading_strategy,
+                'is_shadow_trading': True,
+                'timestamp': datetime.now().isoformat()
+            }
+            return jsonify(portfolio_data)
+        else:
+            # Fall back to original portfolio manager
+            portfolio_data = portfolio_manager.get_portfolio_summary()
+            portfolio_data['is_shadow_trading'] = False
+            return jsonify(portfolio_data)
     except Exception as e:
         logger.error(f"Error getting portfolio: {e}")
         return jsonify({'error': str(e)}), 500
@@ -2133,15 +2233,446 @@ def run_backtest():
         logger.error(f"Error running backtest: {e}")
         return jsonify({'error': str(e)}), 500
 
+# Trading Bot Status Endpoints
+@app.route('/api/status', methods=['GET'])
+def get_trading_bot_status():
+    """Get enhanced trading bot status"""
+    global trading_bot_instance, bot_status
+    try:
+        # Update bot status with real data if bot is running
+        if trading_bot_instance and bot_status['bot_active']:
+            bot_status.update({
+                'last_update': datetime.now().isoformat(),
+                'portfolio_value': trading_bot_instance.portfolio.total_value,
+                'milestone_progress': trading_bot_instance.portfolio.milestone_progress,
+                'daily_trades': len(trading_bot_instance.portfolio.daily_trades),
+                'total_orders': len(trading_bot_instance.portfolio.orders),
+                'cash': trading_bot_instance.portfolio.cash,
+                'positions_count': len(trading_bot_instance.portfolio.positions),
+                'target_amount': trading_bot_instance.portfolio.target_amount,
+                'strategy': trading_bot_instance.trading_strategy
+            })
+
+            # Get AI insights if available
+            if hasattr(trading_bot_instance, 'get_ml_insights'):
+                ml_insights = trading_bot_instance.get_ml_insights()
+                bot_status['ai_insights'] = ml_insights
+
+        return jsonify(bot_status), 200
+    except Exception as e:
+        logger.error(f"Error getting bot status: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/orders', methods=['GET'])
+def get_orders():
+    """Get trading orders - prioritize shadow trading bot if active"""
+    global trading_bot_instance, bot_status
+    try:
+        # If shadow trading bot is active, return its orders
+        if trading_bot_instance and bot_status['bot_active']:
+            # Get recent orders from shadow trading bot
+            orders = []
+            for order in trading_bot_instance.portfolio.orders[-50:]:  # Last 50 orders
+                orders.append({
+                    'id': order.id,
+                    'symbol': order.symbol,
+                    'type': order.order_type.value,
+                    'quantity': order.quantity,
+                    'price': order.price,
+                    'timestamp': order.timestamp.isoformat(),
+                    'status': order.status.value,
+                    'strategy': order.strategy,
+                    'reason': order.reason,
+                    'ai_confidence': order.ai_confidence,
+                    'expected_return': order.expected_return,
+                    'actual_return': order.actual_return
+                })
+
+            return jsonify({
+                'orders': orders,
+                'total': len(trading_bot_instance.portfolio.orders),
+                'daily_trades': len(trading_bot_instance.portfolio.daily_trades),
+                'is_shadow_trading': True,
+                'message': f'Found {len(orders)} recent orders from shadow trading bot'
+            }), 200
+        else:
+            # Return empty orders list for original system
+            return jsonify({
+                'orders': [],
+                'total': 0,
+                'is_shadow_trading': False,
+                'message': 'No orders found - shadow trading bot not active'
+            }), 200
+    except Exception as e:
+        logger.error(f"Error getting orders: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/performance', methods=['GET'])
+def get_performance():
+    """Get trading performance metrics - prioritize shadow trading bot if active"""
+    global trading_bot_instance, bot_status
+    try:
+        # If shadow trading bot is active, return its performance data
+        if trading_bot_instance and bot_status['bot_active']:
+            # Get performance report from shadow trading bot
+            performance_report = trading_bot_instance.get_performance_report()
+            ml_insights = trading_bot_instance.get_ml_insights()
+
+            # Calculate additional metrics
+            total_return = (trading_bot_instance.portfolio.total_value - trading_bot_instance.initial_capital) / trading_bot_instance.initial_capital
+            daily_trades = len(trading_bot_instance.portfolio.daily_trades)
+
+            return jsonify({
+                'total_return': total_return,
+                'total_return_pct': total_return * 100,
+                'daily_return': 0.0,  # Would need historical data to calculate properly
+                'sharpe_ratio': 0.0,  # Would need historical data to calculate properly
+                'max_drawdown': 0.0,  # Would need historical data to calculate properly
+                'win_rate': ml_insights.get('accuracy_score', 0.0),
+                'total_trades': performance_report.get('orders_count', 0),
+                'daily_trades': daily_trades,
+                'current_value': trading_bot_instance.portfolio.total_value,
+                'initial_capital': trading_bot_instance.initial_capital,
+                'milestone_progress': trading_bot_instance.portfolio.milestone_progress,
+                'target_amount': trading_bot_instance.portfolio.target_amount,
+                'patterns_learned': ml_insights.get('patterns_learned', 0),
+                'market_conditions': ml_insights.get('market_conditions', 'unknown'),
+                'strategy': trading_bot_instance.trading_strategy,
+                'is_shadow_trading': True,
+                'message': 'Shadow trading bot performance data'
+            }), 200
+        else:
+            # Fall back to default performance data
+            return jsonify({
+                'total_return': 0.0,
+                'daily_return': 0.0,
+                'sharpe_ratio': 0.0,
+                'max_drawdown': 0.0,
+                'win_rate': 0.0,
+                'total_trades': 0,
+                'is_shadow_trading': False,
+                'message': 'Performance data not available - shadow trading bot not active'
+            }), 200
+    except Exception as e:
+        logger.error(f"Error getting performance: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/watchlist', methods=['GET'])
+def get_watchlist():
+    """Get watchlist"""
+    try:
+        return jsonify({
+            'watchlist': [],
+            'total': 0,
+            'message': 'Watchlist is empty'
+        }), 200
+    except Exception as e:
+        logger.error(f"Error getting watchlist: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/strategies', methods=['GET'])
+def get_strategies():
+    """Get trading strategies"""
+    try:
+        return jsonify({
+            'strategies': [
+                {
+                    'id': 'momentum',
+                    'name': 'Momentum Strategy',
+                    'description': 'Buy stocks with strong upward momentum',
+                    'active': False
+                },
+                {
+                    'id': 'mean_reversion',
+                    'name': 'Mean Reversion Strategy',
+                    'description': 'Buy oversold stocks, sell overbought',
+                    'active': False
+                }
+            ],
+            'total': 2
+        }), 200
+    except Exception as e:
+        logger.error(f"Error getting strategies: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/portfolio/history', methods=['GET'])
+def get_portfolio_history():
+    """Get portfolio history"""
+    try:
+        return jsonify({
+            'history': [],
+            'total': 0,
+            'message': 'No portfolio history available'
+        }), 200
+    except Exception as e:
+        logger.error(f"Error getting portfolio history: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/start', methods=['POST'])
+@trading_access_required(level="trader")
+@require_trade_permission()
+def start_trading_bot():
+    """Start the enhanced shadow trading bot"""
+    global trading_bot_instance, trading_bot_thread, bot_status
+    try:
+        if bot_status['bot_active']:
+            return jsonify({
+                'status': 'already_running',
+                'message': 'Trading bot is already running',
+                'timestamp': datetime.now().isoformat()
+            }), 200
+
+        data = request.get_json() or {}
+        config = data.get('config', {})
+
+        # Extract configuration
+        initial_capital = config.get('initial_capital', 100000.0)
+        target_percent = config.get('target_percent', 0.1)
+        target_amount = initial_capital * (1 + target_percent)
+        strategy = config.get('strategy', 'ai_gemini')
+        watchlist = config.get('watchlist', ['AAPL', 'TSLA', 'MSFT', 'GOOGL', 'NVDA'])
+        interval = config.get('interval', 300)
+
+        # Create enhanced trading bot
+        trading_bot_instance = ShadowTradingBot(
+            initial_capital=initial_capital,
+            target_amount=target_amount,
+            trading_strategy=strategy,
+            enable_ml_learning=True,
+            milestone_target_percent=target_percent
+        )
+
+        # Add watchlist symbols
+        for symbol in watchlist:
+            trading_bot_instance.add_to_watchlist(symbol)
+
+        # Schedule daily evaluation
+        trading_bot_instance.schedule_daily_evaluation(hour=16)
+
+        # Start bot in a separate thread
+        def run_bot():
+            try:
+                trading_bot_instance.start(interval=interval)
+            except Exception as e:
+                logger.error(f"Bot thread error: {e}")
+                bot_status['status'] = 'error'
+                bot_status['message'] = f'Bot encountered an error: {str(e)}'
+                bot_status['bot_active'] = False
+
+        trading_bot_thread = threading.Thread(target=run_bot, daemon=True)
+        trading_bot_thread.start()
+
+        # Update status
+        bot_status.update({
+            'status': 'running',
+            'bot_active': True,
+            'message': 'Enhanced AI trading bot started successfully',
+            'config': config,
+            'timestamp': datetime.now().isoformat(),
+            'initial_capital': initial_capital,
+            'target_amount': target_amount,
+            'strategy': strategy,
+            'watchlist': watchlist,
+            'interval': interval
+        })
+
+        logger.info(f"Enhanced trading bot started with config: {config}")
+        return jsonify(bot_status), 200
+
+    except Exception as e:
+        logger.error(f"Error starting trading bot: {e}")
+        bot_status.update({
+            'status': 'error',
+            'bot_active': False,
+            'message': f'Failed to start trading bot: {str(e)}',
+            'timestamp': datetime.now().isoformat()
+        })
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/stop', methods=['POST'])
+@trading_access_required(level="trader")
+@require_trade_permission()
+def stop_trading_bot():
+    """Stop the enhanced shadow trading bot"""
+    global trading_bot_instance, trading_bot_thread, bot_status
+    try:
+        if not bot_status['bot_active']:
+            return jsonify({
+                'status': 'already_stopped',
+                'message': 'Trading bot is already stopped',
+                'timestamp': datetime.now().isoformat()
+            }), 200
+
+        # Stop the trading bot
+        if trading_bot_instance:
+            trading_bot_instance.stop()
+
+            # Perform final evaluation
+            try:
+                trading_bot_instance.perform_daily_evaluation()
+                final_report = trading_bot_instance.get_performance_report()
+                ml_insights = trading_bot_instance.get_ml_insights()
+            except:
+                final_report = {}
+                ml_insights = {}
+
+        # Update status
+        bot_status.update({
+            'status': 'stopped',
+            'bot_active': False,
+            'message': 'Enhanced AI trading bot stopped successfully',
+            'timestamp': datetime.now().isoformat(),
+            'final_report': final_report if 'final_report' in locals() else {},
+            'ml_insights': ml_insights if 'ml_insights' in locals() else {}
+        })
+
+        # Reset instances
+        trading_bot_instance = None
+        trading_bot_thread = None
+
+        logger.info("Enhanced trading bot stopped successfully")
+        return jsonify(bot_status), 200
+
+    except Exception as e:
+        logger.error(f"Error stopping trading bot: {e}")
+        bot_status.update({
+            'status': 'error',
+            'bot_active': False,
+            'message': f'Error stopping trading bot: {str(e)}',
+            'timestamp': datetime.now().isoformat()
+        })
+        return jsonify({'error': str(e)}), 500
+
+# Add the missing trading-bot endpoint that frontend is looking for
+@app.route('/trading-bot', methods=['GET'])
+def trading_bot_redirect():
+    """Redirect to the proper trading bot status endpoint"""
+    return get_trading_bot_status()
+
+# Enhanced trading bot endpoints
+@app.route('/api/trading-bot/performance', methods=['GET'])
+def get_trading_bot_performance():
+    """Get detailed trading bot performance metrics"""
+    global trading_bot_instance, bot_status
+    try:
+        if not trading_bot_instance or not bot_status['bot_active']:
+            return jsonify({
+                'error': 'Trading bot is not running',
+                'status': 'stopped'
+            }), 404
+
+        # Get comprehensive performance data
+        performance_report = trading_bot_instance.get_performance_report()
+        ml_insights = trading_bot_instance.get_ml_insights()
+        strategy_insights = trading_bot_instance.get_strategy_insights()
+
+        response = {
+            'performance_report': performance_report,
+            'ml_insights': ml_insights,
+            'strategy_insights': strategy_insights,
+            'daily_performance': trading_bot_instance.daily_performance[-30:],  # Last 30 days
+            'portfolio': {
+                'cash': trading_bot_instance.portfolio.cash,
+                'total_value': trading_bot_instance.portfolio.total_value,
+                'positions': {symbol: {
+                    'symbol': pos.symbol,
+                    'quantity': pos.quantity,
+                    'avg_price': pos.avg_price,
+                    'current_price': pos.current_price,
+                    'unrealized_pnl': pos.unrealized_pnl,
+                    'market_value': pos.market_value
+                } for symbol, pos in trading_bot_instance.portfolio.positions.items()},
+                'milestone_progress': trading_bot_instance.portfolio.milestone_progress,
+                'target_amount': trading_bot_instance.portfolio.target_amount
+            },
+            'timestamp': datetime.now().isoformat()
+        }
+
+        return jsonify(response), 200
+
+    except Exception as e:
+        logger.error(f"Error getting bot performance: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/trading-bot/orders', methods=['GET'])
+def get_trading_bot_orders():
+    """Get trading bot orders"""
+    global trading_bot_instance, bot_status
+    try:
+        if not trading_bot_instance or not bot_status['bot_active']:
+            return jsonify({
+                'error': 'Trading bot is not running',
+                'status': 'stopped',
+                'orders': []
+            }), 404
+
+        # Get recent orders
+        orders = []
+        for order in trading_bot_instance.portfolio.orders[-100:]:  # Last 100 orders
+            orders.append({
+                'id': order.id,
+                'symbol': order.symbol,
+                'order_type': order.order_type.value,
+                'quantity': order.quantity,
+                'price': order.price,
+                'timestamp': order.timestamp.isoformat(),
+                'status': order.status.value,
+                'strategy': order.strategy,
+                'reason': order.reason,
+                'ai_confidence': order.ai_confidence,
+                'expected_return': order.expected_return,
+                'actual_return': order.actual_return
+            })
+
+        return jsonify({
+            'orders': orders,
+            'daily_trades': len(trading_bot_instance.portfolio.daily_trades),
+            'total_orders': len(trading_bot_instance.portfolio.orders),
+            'timestamp': datetime.now().isoformat()
+        }), 200
+
+    except Exception as e:
+        logger.error(f"Error getting bot orders: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/marketmate/query', methods=['POST', 'OPTIONS'])
+def marketmate_query():
+    """Handle MarketMate AI assistant queries"""
+    if request.method == 'OPTIONS':
+        return '', 200
+    
+    try:
+        data = request.get_json()
+        query = data.get('query', '') if data else ''
+        
+        # Simple response for now
+        response = {
+            'response': f"I received your query: '{query}'. This is a placeholder response from the MarketMate AI assistant.",
+            'timestamp': datetime.now().isoformat(),
+            'query_id': f"query_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+        }
+        
+        return jsonify(response), 200
+    except Exception as e:
+        logger.error(f"Error processing MarketMate query: {e}")
+        return jsonify({'error': str(e)}), 500
+
 if __name__ == '__main__':
     
     # Get port from environment variable (for Cloud Run) or default to 8080
     port = int(os.environ.get('PORT', 8080))
-    
-    print("🚀 Starting AI Stock Trading API Server...")
-    print(f"📊 API endpoints available at http://localhost:{port}")
-    print(f"🔗 React frontend should connect to http://localhost:{port}")
-    print("📖 API documentation:")
+
+    # Determine host for display (GCP vs local)
+    is_gcp = os.environ.get('GAE_APPLICATION') or os.environ.get('GOOGLE_CLOUD_PROJECT')
+    if is_gcp:
+        host_url = f"https://{os.environ.get('GAE_APPLICATION', 'your-app')}.appspot.com"
+    else:
+        host_url = f"http://localhost:{port}"
+
+    print("Starting Enhanced AI Stock Trading API Server...")
+    print(f"API endpoints available at {host_url}")
+    print(f"React frontend should connect to {host_url}")
+    print("API documentation:")
     print("   - GET  /api/health - Health check")
     print("   - GET  /api/stock/data - Get stock data")
     print("   - GET  /api/stock/info - Get stock info")
@@ -2161,7 +2692,7 @@ if __name__ == '__main__':
     print("   - POST /api/portfolio/rebalance - Rebalance portfolio")
     print("   - POST /api/portfolio/save - Save portfolio state")
     print("   - POST /api/portfolio/load - Load portfolio state")
-    print("   🚀 ENHANCED PORTFOLIO ENDPOINTS:")
+    print("   ENHANCED PORTFOLIO ENDPOINTS:")
     print("   - POST /api/portfolio/enhanced/initialize - Initialize enhanced portfolio")
     print("   - POST /api/portfolio/enhanced/update-investment - Update investment amount")
     print("   - POST /api/portfolio/enhanced/buy - Buy shares at market price")
@@ -2170,7 +2701,7 @@ if __name__ == '__main__':
     print("   - GET  /api/portfolio/enhanced/transactions - Get transaction history")
     print("   - GET  /api/portfolio/enhanced/asset/<symbol> - Get asset performance")
     print("   - GET  /api/portfolio/enhanced/current-price/<symbol> - Get current market price")
-    print("   🤖 ENHANCED AUTO TRADER ENDPOINTS:")
+    print("   ENHANCED AUTO TRADER ENDPOINTS:")
     print("   - POST /api/trader/configure - Configure auto trader goals and parameters")
     print("   - POST /api/trader/start - Start automated trading system")
     print("   - POST /api/trader/stop - Stop automated trading system")

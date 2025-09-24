@@ -1,0 +1,37 @@
+steps:
+  # Build frontend with proper nginx configuration
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['build', '-f', 'Dockerfile.frontend-nginx', '-t', 'gcr.io/$PROJECT_ID/ai-stock-trading-frontend:nginx', '.']
+
+  # Push the image
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['push', 'gcr.io/$PROJECT_ID/ai-stock-trading-frontend:nginx']
+
+  # Deploy to Cloud Run with improved configuration
+  - name: 'gcr.io/cloud-builders/gcloud'
+    args:
+      - 'run'
+      - 'deploy'
+      - 'ai-stock-trading-frontend'
+      - '--image'
+      - 'gcr.io/$PROJECT_ID/ai-stock-trading-frontend:nginx'
+      - '--region'
+      - 'us-central1'
+      - '--platform'
+      - 'managed'
+      - '--allow-unauthenticated'
+      - '--port'
+      - '8080'
+      - '--memory'
+      - '1Gi'
+      - '--cpu'
+      - '1'
+      - '--max-instances'
+      - '5'
+      - '--timeout'
+      - '300'
+      - '--set-env-vars'
+      - 'REACT_APP_API_URL=https://ai-stock-trading-api-o6i75igepq-uc.a.run.app'
+
+images:
+  - 'gcr.io/$PROJECT_ID/ai-stock-trading-frontend:nginx'

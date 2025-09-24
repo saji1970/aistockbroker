@@ -55,6 +55,18 @@ self.addEventListener('fetch', event => {
     return;
   }
 
+  // For API requests, always go to network and don't intercept CORS errors
+  if (event.request.url.includes('/api/')) {
+    event.respondWith(
+      fetch(event.request).catch(error => {
+        console.log('API fetch failed:', error);
+        // Don't return 503 for API requests - let the browser handle CORS errors
+        throw error;
+      })
+    );
+    return;
+  }
+
   // For JavaScript files, always fetch from network to ensure latest version
   if (event.request.url.includes('/static/js/') || event.request.url.includes('.js')) {
     event.respondWith(

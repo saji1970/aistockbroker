@@ -13,7 +13,7 @@ BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
 # Configuration
-PROJECT_ID="stockadvisor-463716"
+PROJECT_ID="stockbroker-28983"
 REGION="us-central1"
 SERVICE_NAME_BACKEND="ai-stock-trading-backend"
 SERVICE_NAME_FRONTEND="ai-stock-trading-frontend"

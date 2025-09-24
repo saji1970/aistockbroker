@@ -287,8 +287,8 @@ class DataFetcher:
             base_price = 180.0
             volatility = 0.03
         else:
-        base_price = random.uniform(50, 500)
-        volatility = random.uniform(0.02, 0.05)
+            base_price = random.uniform(50, 500)
+            volatility = random.uniform(0.02, 0.05)
         
         prices = []
         current_price = base_price
@@ -378,25 +378,25 @@ class DataFetcher:
                 'description': 'Alphabet Inc. provides online advertising services in the United States, Europe, the Middle East, Africa, the Asia-Pacific, Canada, and Latin America.'
             }
         else:
-        return {
-            'symbol': symbol,
-            'shortName': f'{symbol} Corp',
-            'longName': f'{symbol} Corporation',
-            'sector': random.choice(['Technology', 'Healthcare', 'Finance', 'Consumer Discretionary', 'Energy']),
-            'industry': 'Sample Industry',
-            'marketCap': random.randint(1000000000, 1000000000000),
-            'currentPrice': random.uniform(50, 500),
-            'targetMeanPrice': random.uniform(50, 500),
-            'recommendationMean': random.uniform(1.5, 4.5),
-            'fiftyTwoWeekHigh': random.uniform(100, 1000),
-            'fiftyTwoWeekLow': random.uniform(10, 100),
-            'volume': random.randint(1000000, 10000000),
-            'averageVolume': random.randint(1000000, 10000000),
-            'peRatio': random.uniform(10, 50),
-            'dividendYield': random.uniform(0, 0.05),
-            'beta': random.uniform(0.5, 2.0),
-            'description': f'Sample description for {symbol}'
-        }
+            return {
+                'symbol': symbol,
+                'shortName': f'{symbol} Corp',
+                'longName': f'{symbol} Corporation',
+                'sector': random.choice(['Technology', 'Healthcare', 'Finance', 'Consumer Discretionary', 'Energy']),
+                'industry': 'Sample Industry',
+                'marketCap': random.randint(1000000000, 1000000000000),
+                'currentPrice': random.uniform(50, 500),
+                'targetMeanPrice': random.uniform(50, 500),
+                'recommendationMean': random.uniform(1.5, 4.5),
+                'fiftyTwoWeekHigh': random.uniform(100, 1000),
+                'fiftyTwoWeekLow': random.uniform(10, 100),
+                'volume': random.randint(1000000, 10000000),
+                'averageVolume': random.randint(1000000, 10000000),
+                'peRatio': random.uniform(10, 50),
+                'dividendYield': random.uniform(0, 0.05),
+                'beta': random.uniform(0.5, 2.0),
+                'description': f'Sample description for {symbol}'
+            }
     
     def get_market_data(self):
         """

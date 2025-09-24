@@ -1,143 +1,287 @@
-#!/usr/bin/env python3
 """
-Test Runner for AI Stock Trading Bot
-Provides options to run different types of tests
+Test Runner for Agent System
+Runs all unit tests and integration tests locally
 """
 
-import sys
 import os
-import argparse
+import sys
 import subprocess
+import time
+import json
 from datetime import datetime
 
+def run_command(command, description):
+    """Run a command and return the result"""
+    print(f"\n{'='*60}")
+    print(f"Running: {description}")
+    print(f"Command: {command}")
+    print(f"{'='*60}")
+    
+    start_time = time.time()
+    try:
+        result = subprocess.run(
+            command,
+            shell=True,
+            capture_output=True,
+            text=True,
+            timeout=300  # 5 minutes timeout
+        )
+        end_time = time.time()
+        
+        print(f"Exit code: {result.returncode}")
+        print(f"Duration: {end_time - start_time:.2f} seconds")
+        
+        if result.stdout:
+            print(f"\nSTDOUT:\n{result.stdout}")
+        
+        if result.stderr:
+            print(f"\nSTDERR:\n{result.stderr}")
+        
+        return {
+            'success': result.returncode == 0,
+            'stdout': result.stdout,
+            'stderr': result.stderr,
+            'duration': end_time - start_time,
+            'exit_code': result.returncode
+        }
+        
+    except subprocess.TimeoutExpired:
+        print(f"Command timed out after 5 minutes")
+        return {
+            'success': False,
+            'stdout': '',
+            'stderr': 'Command timed out',
+            'duration': 300,
+            'exit_code': -1
+        }
+    except Exception as e:
+        print(f"Error running command: {e}")
+        return {
+            'success': False,
+            'stdout': '',
+            'stderr': str(e),
+            'duration': 0,
+            'exit_code': -1
+        }
+
+def check_dependencies():
+    """Check if required dependencies are installed"""
+    print("Checking dependencies...")
+    
+    required_packages = [
+        'pytest',
+        'pandas',
+        'numpy',
+        'yfinance',
+        'flask',
+        'aiohttp',
+        'python-dotenv'
+    ]
+    
+    missing_packages = []
+    
+    for package in required_packages:
+        try:
+            __import__(package.replace('-', '_'))
+            print(f"✓ {package}")
+        except ImportError:
+            print(f"✗ {package} - MISSING")
+            missing_packages.append(package)
+    
+    if missing_packages:
+        print(f"\nMissing packages: {', '.join(missing_packages)}")
+        print("Installing missing packages...")
+        
+        install_command = f"pip install {' '.join(missing_packages)}"
+        result = run_command(install_command, "Installing missing packages")
+        
+        if not result['success']:
+            print("Failed to install missing packages. Please install them manually.")
+            return False
+    
+    return True
+
 def run_unit_tests():
-    """Run unit tests only"""
-    print("🧪 Running Unit Tests...")
-    print("=" * 50)
+    """Run unit tests"""
+    print("\n" + "="*80)
+    print("RUNNING UNIT TESTS")
+    print("="*80)
+    
+    # Run pytest on the test file
+    test_command = "python -m pytest backend/test_agent_system.py -v --tb=short"
+    result = run_command(test_command, "Unit Tests")
+    
+    return result
+
+def run_integration_tests():
+    """Run integration tests"""
+    print("\n" + "="*80)
+    print("RUNNING INTEGRATION TESTS")
+    print("="*80)
+    
+    # Run specific integration tests
+    integration_command = "python -m pytest backend/test_agent_system.py::TestIntegration -v --tb=short"
+    result = run_command(integration_command, "Integration Tests")
+    
+    return result
+
+def run_performance_tests():
+    """Run performance tests"""
+    print("\n" + "="*80)
+    print("RUNNING PERFORMANCE TESTS")
+    print("="*80)
+    
+    # Run performance tests
+    performance_command = "python -m pytest backend/test_agent_system.py::TestPerformance -v --tb=short"
+    result = run_command(performance_command, "Performance Tests")
+    
+    return result
+
+def test_api_endpoints():
+    """Test API endpoints"""
+    print("\n" + "="*80)
+    print("TESTING API ENDPOINTS")
+    print("="*80)
+    
+    # Start the API server in background
+    print("Starting API server...")
+    server_process = subprocess.Popen(
+        ["python", "api_server.py"],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True
+    )
+    
+    # Wait for server to start
+    time.sleep(5)
     
     try:
-        result = subprocess.run([sys.executable, "test_unit_only.py"], 
-                              capture_output=True, text=True, timeout=300)
+        # Test health endpoint
+        health_command = "curl -s http://localhost:8080/api/agent/health"
+        health_result = run_command(health_command, "Health Check")
         
-        print(result.stdout)
-        if result.stderr:
-            print("STDERR:", result.stderr)
+        # Test agent login
+        login_command = 'curl -s -X POST http://localhost:8080/api/agent/auth/login -H "Content-Type: application/json" -d \'{"email":"admin@aistockbroker.com","password":"admin123"}\''
+        login_result = run_command(login_command, "Agent Login")
         
-        return result.returncode == 0
-    except subprocess.TimeoutExpired:
-        print("❌ Unit tests timed out!")
-        return False
-    except Exception as e:
-        print(f"❌ Error running unit tests: {e}")
-        return False
+        return {
+            'health': health_result,
+            'login': login_result
+        }
+        
+    finally:
+        # Stop the server
+        print("Stopping API server...")
+        server_process.terminate()
+        server_process.wait()
 
-def run_api_tests():
-    """Run API integration tests"""
-    print("🌐 Running API Integration Tests...")
-    print("=" * 50)
+def generate_test_report(results):
+    """Generate test report"""
+    report = {
+        'timestamp': datetime.now().isoformat(),
+        'summary': {
+            'total_tests': 0,
+            'passed': 0,
+            'failed': 0,
+            'duration': 0
+        },
+        'results': results
+    }
     
-    try:
-        result = subprocess.run([sys.executable, "test_trading_bot.py"], 
-                              capture_output=True, text=True, timeout=600)
-        
-        print(result.stdout)
-        if result.stderr:
-            print("STDERR:", result.stderr)
-        
-        return result.returncode == 0
-    except subprocess.TimeoutExpired:
-        print("❌ API tests timed out!")
-        return False
-    except Exception as e:
-        print(f"❌ Error running API tests: {e}")
-        return False
-
-def run_quick_tests():
-    """Run quick tests (unit tests only)"""
-    print("⚡ Running Quick Tests...")
-    print("=" * 50)
+    # Calculate summary
+    for test_type, result in results.items():
+        if isinstance(result, dict) and 'success' in result:
+            report['summary']['total_tests'] += 1
+            if result['success']:
+                report['summary']['passed'] += 1
+            else:
+                report['summary']['failed'] += 1
+            report['summary']['duration'] += result.get('duration', 0)
     
-    return run_unit_tests()
-
-def run_all_tests():
-    """Run all tests"""
-    print("🚀 Running All Tests...")
-    print("=" * 50)
+    # Save report
+    with open('test_report.json', 'w') as f:
+        json.dump(report, f, indent=2)
     
-    # Run unit tests first
-    unit_success = run_unit_tests()
-    
-    if not unit_success:
-        print("\n❌ Unit tests failed, skipping API tests")
-        return False
-    
-    print("\n" + "=" * 50)
-    
-    # Run API tests
-    api_success = run_api_tests()
-    
-    return unit_success and api_success
-
-def run_specific_test_class(test_class):
-    """Run a specific test class"""
-    print(f"🎯 Running {test_class} Tests...")
-    print("=" * 50)
-    
-    try:
-        result = subprocess.run([
-            sys.executable, "-m", "unittest", 
-            f"test_trading_bot.{test_class}"
-        ], capture_output=True, text=True, timeout=300)
-        
-        print(result.stdout)
-        if result.stderr:
-            print("STDERR:", result.stderr)
-        
-        return result.returncode == 0
-    except subprocess.TimeoutExpired:
-        print("❌ Tests timed out!")
-        return False
-    except Exception as e:
-        print(f"❌ Error running tests: {e}")
-        return False
+    return report
 
 def main():
     """Main test runner"""
-    parser = argparse.ArgumentParser(description="Test Runner for AI Stock Trading Bot")
-    parser.add_argument("--type", choices=["unit", "api", "quick", "all"], 
-                       default="all", help="Type of tests to run")
-    parser.add_argument("--class", dest="test_class", 
-                       help="Run specific test class")
-    parser.add_argument("--verbose", "-v", action="store_true", 
-                       help="Verbose output")
+    print("AI Stock Trading Agent System - Test Runner")
+    print("=" * 80)
     
-    args = parser.parse_args()
+    # Check if we're in the right directory
+    if not os.path.exists('backend'):
+        print("Error: Please run this script from the project root directory")
+        sys.exit(1)
     
-    print(f"🧪 AI Stock Trading Bot Test Suite")
-    print(f"📅 {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-    print("=" * 60)
+    # Change to backend directory
+    os.chdir('backend')
     
-    success = False
+    # Check dependencies
+    if not check_dependencies():
+        print("Dependency check failed. Exiting.")
+        sys.exit(1)
     
-    if args.test_class:
-        success = run_specific_test_class(args.test_class)
-    elif args.type == "unit":
-        success = run_unit_tests()
-    elif args.type == "api":
-        success = run_api_tests()
-    elif args.type == "quick":
-        success = run_quick_tests()
-    elif args.type == "all":
-        success = run_all_tests()
+    # Run tests
+    results = {}
     
-    print("\n" + "=" * 60)
+    # Unit tests
+    print("\n" + "="*80)
+    print("STARTING TEST EXECUTION")
+    print("="*80)
     
-    if success:
-        print("✅ All tests completed successfully!")
-        exit(0)
+    unit_result = run_unit_tests()
+    results['unit_tests'] = unit_result
+    
+    # Integration tests
+    integration_result = run_integration_tests()
+    results['integration_tests'] = integration_result
+    
+    # Performance tests
+    performance_result = run_performance_tests()
+    results['performance_tests'] = performance_result
+    
+    # API endpoint tests
+    api_result = test_api_endpoints()
+    results['api_tests'] = api_result
+    
+    # Generate report
+    report = generate_test_report(results)
+    
+    # Print summary
+    print("\n" + "="*80)
+    print("TEST SUMMARY")
+    print("="*80)
+    print(f"Total Tests: {report['summary']['total_tests']}")
+    print(f"Passed: {report['summary']['passed']}")
+    print(f"Failed: {report['summary']['failed']}")
+    print(f"Duration: {report['summary']['duration']:.2f} seconds")
+    print(f"Report saved to: test_report.json")
+    
+    # Print detailed results
+    print("\n" + "="*80)
+    print("DETAILED RESULTS")
+    print("="*80)
+    
+    for test_type, result in results.items():
+        print(f"\n{test_type.upper()}:")
+        if isinstance(result, dict):
+            if result.get('success'):
+                print(f"  ✓ PASSED ({result.get('duration', 0):.2f}s)")
+            else:
+                print(f"  ✗ FAILED ({result.get('duration', 0):.2f}s)")
+                if result.get('stderr'):
+                    print(f"    Error: {result['stderr']}")
+        else:
+            print(f"  ? UNKNOWN")
+    
+    # Exit with appropriate code
+    if report['summary']['failed'] > 0:
+        print(f"\n❌ {report['summary']['failed']} test(s) failed")
+        sys.exit(1)
     else:
-        print("❌ Some tests failed!")
-        exit(1)
+        print(f"\n✅ All tests passed!")
+        sys.exit(0)
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     main()

@@ -20,7 +20,7 @@ RUN npm run build
 RUN npm install -g serve
 
 # Expose port (Cloud Run will set PORT environment variable)
-EXPOSE 8080
+EXPOSE $PORT
 
-# Start the server
-CMD ["serve", "-s", "build", "-l", "8080"]
+# Start the server with dynamic port
+CMD sh -c "serve -s build -l ${PORT:-8080}"

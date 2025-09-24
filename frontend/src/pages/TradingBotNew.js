@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useTradingBot } from '../hooks/useTradingBot';
+import { useTradingAccess } from '../hooks/useTradingAccess';
 import TradingBotChart from '../components/Charts/TradingBotChart';
 import BotConfiguration from '../components/Trading/BotConfiguration';
 import TradingMonitor from '../components/Trading/TradingMonitor';
@@ -18,22 +19,21 @@ const TradingBotNew = () => {
     return savedConfig ? JSON.parse(savedConfig) : null;
   });
 
+  // Trading access hook
+  const { handleError } = useTradingAccess();
+
   const {
     botStatus,
     portfolio,
     orders,
     watchlist,
-    strategies,
     performance,
     portfolioHistory,
     loading,
     error,
-    metrics,
     startBot,
     stopBot,
     restartBot,
-    addToWatchlist: addToWatchlistAPI,
-    removeFromWatchlist: removeFromWatchlistAPI,
     clearError
   } = useTradingBot();
 
@@ -44,6 +44,11 @@ const TradingBotNew = () => {
       localStorage.setItem('tradingBotConfig', JSON.stringify(config));
       await startBot(config);
     } catch (error) {
+      // Handle trading access errors
+      if (handleError(error)) {
+        return; // Error was handled (user logged out)
+      }
+      
       // Handle "bot already running" error gracefully
       if (error.message && error.message.includes('already running')) {
         // Bot is already running, ask user if they want to restart
@@ -86,6 +91,10 @@ const TradingBotNew = () => {
       localStorage.removeItem('tradingBotConfig');
       setBotConfig(null);
     } catch (error) {
+      // Handle trading access errors
+      if (handleError(error)) {
+        return; // Error was handled (user logged out)
+      }
       console.error('Error stopping bot:', error);
     }
   };

@@ -783,4 +783,20 @@ class PortfolioManager:
         
         cutoff_date = datetime.now() - timedelta(days=days)
         return [record for record in self.portfolio.performance_history 
-                if record['date'] >= cutoff_date] 
+                if record['date'] >= cutoff_date]
+
+    def buy_stock(self, symbol: str, shares: int, price: float) -> bool:
+        """Buy shares of a stock (public method for API)."""
+        try:
+            return self._buy_asset(symbol, shares, price)
+        except Exception as e:
+            logger.error(f"Error buying stock {symbol}: {e}")
+            return False
+
+    def sell_stock(self, symbol: str, shares: int, price: float) -> bool:
+        """Sell shares of a stock (public method for API)."""
+        try:
+            return self._sell_asset(symbol, shares, price)
+        except Exception as e:
+            logger.error(f"Error selling stock {symbol}: {e}")
+            return False 

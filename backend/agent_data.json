@@ -1,0 +1,58 @@
+{
+  "agents": [
+    {
+      "id": "379d19ad-3518-4753-80de-e2f207cff2c7",
+      "name": "Admin Agent",
+      "email": "admin@aistockbroker.com",
+      "role": "AgentRole.DIRECTOR",
+      "password_hash": "240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720a9",
+      "created_at": "2025-09-24 05:32:07.196535",
+      "last_login": null,
+      "is_active": true,
+      "customers": []
+    },
+    {
+      "id": "23045c0c-fbb8-45c2-9df1-196367a54ebd",
+      "name": "Admin Agent",
+      "email": "admin@aistocktrader.com",
+      "role": "AgentRole.SENIOR",
+      "password_hash": "240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720a9",
+      "created_at": "2025-09-24 05:32:07.197352",
+      "last_login": null,
+      "is_active": true,
+      "customers": [
+        "5ba4adaa-db3d-4a4c-a953-d6e8540f7325"
+      ]
+    },
+    {
+      "id": "5f3078bc-7125-47d6-acaf-7ba7370d3aec",
+      "name": "Trading Agent",
+      "email": "trader@aistocktrader.com",
+      "role": "AgentRole.SENIOR",
+      "password_hash": "8f851d723d5fba36294b98968ae64119dbd1f5260900c05c424baf465e73e762",
+      "created_at": "2025-09-24 05:32:07.198136",
+      "last_login": null,
+      "is_active": true,
+      "customers": []
+    }
+  ],
+  "customers": [
+    {
+      "id": "5ba4adaa-db3d-4a4c-a953-d6e8540f7325",
+      "name": "Demo Customer",
+      "email": "customer@aistocktrader.com",
+      "phone": "555-0123",
+      "tier": "CustomerTier.PREMIUM",
+      "agent_id": "23045c0c-fbb8-45c2-9df1-196367a54ebd",
+      "created_at": "2025-09-24 05:32:07.198829",
+      "risk_tolerance": "medium",
+      "investment_goals": [],
+      "portfolio_id": "7096287c-d356-4454-adde-63a08c47e07d",
+      "is_active": true,
+      "last_contact": null
+    }
+  ],
+  "trade_suggestions": [],
+  "agent_decisions": [],
+  "learning_data": []
+}

@@ -4,6 +4,7 @@
  */
 
 import { safeLogError } from '../utils/safeLogger';
+import { fetchWithTradingAccess, handleTradingAccessError } from '../utils/tradingAuth';
 
 import { TRADING_BOT_API_URL } from './config';
 
@@ -15,12 +16,13 @@ class TradingBotAPI {
    */
   async getStatus() {
     try {
-      const response = await fetch(`${API_BASE_URL}/api/status`);
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
+      const response = await fetchWithTradingAccess(`${API_BASE_URL}/api/status`);
       return await response.json();
     } catch (error) {
+      // Handle trading access errors
+      if (handleTradingAccessError(error)) {
+        throw error;
+      }
       safeLogError('Error fetching bot status:', error);
       throw error;
     }
@@ -71,7 +73,7 @@ class TradingBotAPI {
       };
 
       console.log('Starting bot with config:', cleanConfig);
-      const response = await fetch(`${API_BASE_URL}/api/start`, {
+      const response = await fetchWithTradingAccess(`${API_BASE_URL}/api/start`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -99,7 +101,7 @@ class TradingBotAPI {
    */
   async stopBot() {
     try {
-      const response = await fetch(`${API_BASE_URL}/api/stop`, {
+      const response = await fetchWithTradingAccess(`${API_BASE_URL}/api/stop`, {
         method: 'POST'
       });
 

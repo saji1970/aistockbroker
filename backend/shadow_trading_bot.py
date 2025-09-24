@@ -7,6 +7,7 @@ A sophisticated trading bot that performs paper trading with real market data
 import asyncio
 import json
 import logging
+import os
 import time
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Tuple
@@ -16,18 +17,32 @@ import yfinance as yf
 import pandas as pd
 import numpy as np
 from concurrent.futures import ThreadPoolExecutor
-import websocket
 import threading
+import pickle
+from gemini_predictor import GeminiStockPredictor
+from data_fetcher import data_fetcher
+from config import Config
 
 # Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.FileHandler('trading_bot.log'),
-        logging.StreamHandler()
-    ]
-)
+def _setup_logging():
+    """Setup logging with cloud-compatible configuration"""
+    handlers = [logging.StreamHandler()]  # Always include console output
+
+    # Only add file handler in local environment
+    is_cloud = os.environ.get('GAE_APPLICATION') or os.environ.get('GOOGLE_CLOUD_PROJECT')
+    if not is_cloud:
+        try:
+            handlers.append(logging.FileHandler('trading_bot.log'))
+        except Exception:
+            pass  # Skip file logging if not available
+
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+        handlers=handlers
+    )
+
+_setup_logging()
 logger = logging.getLogger(__name__)
 
 class OrderType(Enum):
@@ -65,6 +80,9 @@ class Order:
     status: OrderStatus
     strategy: str
     reason: str
+    ai_confidence: float = 0.0
+    expected_return: float = 0.0
+    actual_return: Optional[float] = None
 
 @dataclass
 class Position:
@@ -83,6 +101,9 @@ class Portfolio:
     positions: Dict[str, Position]
     orders: List[Order]
     performance_metrics: Dict[str, float]
+    daily_trades: List[Order]
+    target_amount: Optional[float] = None
+    milestone_progress: float = 0.0
 
 class TradingStrategy:
     """Base class for trading strategies"""
@@ -164,49 +185,114 @@ class MeanReversionStrategy(TradingStrategy):
 
 class RSIStrategy(TradingStrategy):
     """RSI-based trading strategy"""
-    
+
     def __init__(self, parameters: Dict):
         super().__init__("RSI", parameters)
         self.lookback_period = parameters.get('lookback_period', 14)
         self.oversold_threshold = parameters.get('oversold_threshold', 30)
         self.overbought_threshold = parameters.get('overbought_threshold', 70)
-        
+
     def calculate_rsi(self, prices: List[float]) -> float:
         """Calculate RSI indicator"""
         if len(prices) < 2:
             return 50
-            
+
         deltas = np.diff(prices)
         gains = np.where(deltas > 0, deltas, 0)
         losses = np.where(deltas < 0, -deltas, 0)
-        
+
         avg_gain = np.mean(gains)
         avg_loss = np.mean(losses)
-        
+
         if avg_loss == 0:
             return 100
-            
+
         rs = avg_gain / avg_loss
         rsi = 100 - (100 / (1 + rs))
         return rsi
-        
+
     def analyze(self, data: List[StockData]) -> OrderType:
         if len(data) < self.lookback_period + 1:
             return OrderType.HOLD
-            
+
         prices = [d.close for d in data[-self.lookback_period-1:]]
         rsi = self.calculate_rsi(prices)
-        
+
         if rsi < self.oversold_threshold:
             return OrderType.BUY
         elif rsi > self.overbought_threshold:
             return OrderType.SELL
         else:
             return OrderType.HOLD
-            
+
     def should_exit(self, position: Position, current_data: StockData) -> bool:
         # Exit when RSI returns to neutral zone
         return 40 <= self.calculate_rsi([current_data.close]) <= 60
+
+class GeminiStrategy(TradingStrategy):
+    """AI-powered trading strategy using Gemini predictions"""
+
+    def __init__(self, parameters: Dict):
+        super().__init__("GeminiAI", parameters)
+        self.confidence_threshold = parameters.get('confidence_threshold', 0.7)
+        self.prediction_timeframe = parameters.get('prediction_timeframe', '1d')
+        self.min_expected_return = parameters.get('min_expected_return', 0.02)
+        self.predictor = None
+
+    def set_predictor(self, predictor):
+        """Set the Gemini predictor instance"""
+        self.predictor = predictor
+
+    def analyze(self, data: List[StockData], symbol: str = None) -> OrderType:
+        if not self.predictor or not symbol:
+            return OrderType.HOLD
+
+        try:
+            # Get AI prediction
+            prediction = self.predictor.get_stock_prediction(symbol, self.prediction_timeframe)
+
+            if 'error' in prediction:
+                logger.warning(f"AI prediction error for {symbol}: {prediction['error']}")
+                return OrderType.HOLD
+
+            confidence = prediction.get('confidence', 0) / 100.0
+            lstm_analysis = prediction.get('lstm_analysis', {})
+
+            # Check confidence threshold
+            if confidence < self.confidence_threshold:
+                return OrderType.HOLD
+
+            # Extract prediction insights
+            trend_direction = lstm_analysis.get('trend_direction', 'Neutral')
+            prediction_factor = lstm_analysis.get('prediction_factor', 0)
+
+            # Make trading decision based on AI prediction
+            if 'bullish' in trend_direction.lower() and prediction_factor > self.min_expected_return * 100:
+                return OrderType.BUY
+            elif 'bearish' in trend_direction.lower() and prediction_factor < -self.min_expected_return * 100:
+                return OrderType.SELL
+            else:
+                return OrderType.HOLD
+
+        except Exception as e:
+            logger.error(f"Error in Gemini strategy analysis: {e}")
+            return OrderType.HOLD
+
+    def should_exit(self, position: Position, current_data: StockData) -> bool:
+        # Conservative exit strategy - exit if losing more than 3%
+        unrealized_loss_pct = position.unrealized_pnl / (position.avg_price * position.quantity)
+        return unrealized_loss_pct < -0.03
+
+    def get_prediction_data(self, symbol: str) -> Dict:
+        """Get detailed prediction data for analysis"""
+        if not self.predictor:
+            return {}
+
+        try:
+            return self.predictor.get_stock_prediction(symbol, self.prediction_timeframe)
+        except Exception as e:
+            logger.error(f"Error getting prediction data for {symbol}: {e}")
+            return {}
 
 class MarketDataProvider:
     """Real-time market data provider"""
@@ -312,36 +398,50 @@ class RiskManager:
         self.daily_pnl += pnl
 
 class ShadowTradingBot:
-    """Main trading bot class"""
-    
+    """Enhanced shadow trading bot with Gemini AI predictions and daily evaluation"""
+
     def __init__(self, initial_capital: float = 100000.0, target_amount: Optional[float] = None,
                  trading_period_days: int = 30, max_position_size: float = 0.1,
                  max_daily_loss: float = 0.05, risk_tolerance: str = 'medium',
-                 trading_strategy: str = 'momentum', enable_ml_learning: bool = True):
+                 trading_strategy: str = 'ai_gemini', enable_ml_learning: bool = True,
+                 milestone_target_percent: float = 0.1):
         self.initial_capital = initial_capital
-        self.target_amount = target_amount
+        self.target_amount = target_amount or (initial_capital * (1 + milestone_target_percent))
         self.trading_period_days = trading_period_days
         self.max_position_size = max_position_size
         self.max_daily_loss = max_daily_loss
         self.risk_tolerance = risk_tolerance
         self.trading_strategy = trading_strategy
         self.enable_ml_learning = enable_ml_learning
+        self.milestone_target_percent = milestone_target_percent
         
         self.portfolio = Portfolio(
             cash=initial_capital,
             total_value=initial_capital,
             positions={},
             orders=[],
-            performance_metrics={}
+            performance_metrics={},
+            daily_trades=[],
+            target_amount=self.target_amount,
+            milestone_progress=0.0
         )
         
         self.market_data = MarketDataProvider()
-        self.risk_manager = RiskManager()
+        self.risk_manager = RiskManager(max_position_size, max_daily_loss)
         self.strategies = {}
         self.watchlist = []
         self.running = False
+
+        # Initialize Gemini predictor and data fetcher
+        self.gemini_predictor = GeminiStockPredictor(data_fetcher)
+        self.data_fetcher = data_fetcher
+
+        # Daily evaluation tracking
+        self.daily_performance = []
+        self.strategy_performance = {}
+        self.learning_data = []
         
-        # Initialize strategies
+        # Initialize strategies including new AI strategy
         self.strategies['momentum'] = MomentumStrategy({
             'lookback_period': 20,
             'momentum_threshold': 0.02
@@ -354,6 +454,11 @@ class ShadowTradingBot:
             'lookback_period': 14,
             'oversold_threshold': 30,
             'overbought_threshold': 70
+        })
+        self.strategies['ai_gemini'] = GeminiStrategy({
+            'confidence_threshold': 0.7,
+            'prediction_timeframe': '1d',
+            'min_expected_return': 0.02
         })
         
     def add_to_watchlist(self, symbol: str):
@@ -368,8 +473,8 @@ class ShadowTradingBot:
             self.watchlist.remove(symbol)
             logger.info(f"Removed {symbol} from watchlist")
             
-    def place_order(self, symbol: str, order_type: OrderType, quantity: int, 
-                   strategy: str, reason: str) -> Optional[Order]:
+    def place_order(self, symbol: str, order_type: OrderType, quantity: int,
+                   strategy: str, reason: str, ai_confidence: float = 0.0, expected_return: float = 0.0) -> Optional[Order]:
         """Place a shadow trading order"""
         current_data = self.market_data.get_stock_data(symbol)
         if not current_data:
@@ -393,7 +498,7 @@ class ShadowTradingBot:
                 logger.warning(f"Insufficient position for {symbol}")
                 return None
                 
-        # Create order
+        # Create order with AI data
         order = Order(
             id=f"{symbol}_{int(time.time())}",
             symbol=symbol,
@@ -403,14 +508,20 @@ class ShadowTradingBot:
             timestamp=datetime.now(),
             status=OrderStatus.FILLED,  # Shadow trading - orders are immediately filled
             strategy=strategy,
-            reason=reason
+            reason=reason,
+            ai_confidence=ai_confidence,
+            expected_return=expected_return
         )
         
         # Execute order
         self._execute_order(order)
         self.portfolio.orders.append(order)
-        
-        logger.info(f"Order executed: {order_type.value} {quantity} {symbol} @ ${current_data.price:.2f}")
+        self.portfolio.daily_trades.append(order)
+
+        # Update milestone progress
+        self._update_milestone_progress()
+
+        logger.info(f"Order executed: {order_type.value} {quantity} {symbol} @ ${current_data.price:.2f} (AI Confidence: {ai_confidence:.2f})")
         return order
         
     def _execute_order(self, order: Order):
@@ -468,67 +579,97 @@ class ShadowTradingBot:
         self.portfolio.total_value = total_value
         
     def run_strategy(self, symbol: str, strategy_name: str):
-        """Run a specific strategy on a symbol"""
+        """Run a specific strategy on a symbol with enhanced AI integration"""
         if strategy_name not in self.strategies:
             logger.error(f"Strategy {strategy_name} not found")
             return
-            
+
         strategy = self.strategies[strategy_name]
-        
+
+        # Set predictor for AI strategy
+        if isinstance(strategy, GeminiStrategy):
+            strategy.set_predictor(self.gemini_predictor)
+
         # Get historical data
         historical_data = self.market_data.get_historical_data(symbol, "3mo")
         if not historical_data:
             return
-            
+
         # Get current data
         current_data = self.market_data.get_stock_data(symbol)
         if not current_data:
             return
-            
-        # Analyze with strategy
-        signal = strategy.analyze(historical_data)
-        
+
+        # Analyze with strategy (pass symbol for AI strategy)
+        if isinstance(strategy, GeminiStrategy):
+            signal = strategy.analyze(historical_data, symbol)
+        else:
+            signal = strategy.analyze(historical_data)
+
         # Check existing position
         current_position = self.portfolio.positions.get(symbol)
-        
+
+        # Get AI prediction data for enhanced decision making
+        ai_confidence = 0.0
+        expected_return = 0.0
+        if isinstance(strategy, GeminiStrategy):
+            prediction_data = strategy.get_prediction_data(symbol)
+            ai_confidence = prediction_data.get('confidence', 0) / 100.0
+            lstm_analysis = prediction_data.get('lstm_analysis', {})
+            expected_return = lstm_analysis.get('prediction_factor', 0) / 100.0
+
         if signal == OrderType.BUY and (not current_position or current_position.quantity == 0):
-            # Calculate position size
-            quantity = self.risk_manager.calculate_position_size(
-                self.portfolio, symbol, current_data.price
-            )
+            # Calculate position size based on milestone progress
+            quantity = self._calculate_milestone_position_size(symbol, current_data.price, expected_return)
             if quantity > 0:
-                self.place_order(symbol, OrderType.BUY, quantity, strategy_name, 
-                               f"Strategy signal: {signal.value}")
-                               
+                self.place_order(symbol, OrderType.BUY, quantity, strategy_name,
+                               f"Strategy signal: {signal.value}", ai_confidence, expected_return)
+
         elif signal == OrderType.SELL and current_position and current_position.quantity > 0:
             # Sell entire position
             self.place_order(symbol, OrderType.SELL, current_position.quantity, strategy_name,
-                           f"Strategy signal: {signal.value}")
-                           
+                           f"Strategy signal: {signal.value}", ai_confidence, expected_return)
+
         # Check exit conditions for existing positions
         if current_position and current_position.quantity > 0:
             if strategy.should_exit(current_position, current_data):
                 self.place_order(symbol, OrderType.SELL, current_position.quantity, strategy_name,
-                               "Exit condition met")
+                               "Exit condition met", ai_confidence, expected_return)
                                
     def run_trading_cycle(self):
-        """Run one trading cycle"""
-        logger.info("Starting trading cycle...")
-        
+        """Enhanced trading cycle with milestone tracking"""
+        logger.info("Starting enhanced trading cycle...")
+
+        # Reset daily trades at start of new day
+        current_date = datetime.now().date()
+        if not hasattr(self, '_last_trading_date') or self._last_trading_date != current_date:
+            self.portfolio.daily_trades = []
+            self._last_trading_date = current_date
+
         for symbol in self.watchlist:
             try:
-                # Run each strategy
-                for strategy_name in self.strategies.keys():
-                    self.run_strategy(symbol, strategy_name)
-                    
+                # Prioritize AI strategy if available
+                if self.trading_strategy in self.strategies:
+                    self.run_strategy(symbol, self.trading_strategy)
+                else:
+                    # Run each strategy
+                    for strategy_name in self.strategies.keys():
+                        self.run_strategy(symbol, strategy_name)
+
             except Exception as e:
                 logger.error(f"Error processing {symbol}: {e}")
-                
+
         # Update portfolio value
         self._update_portfolio_value()
-        
+
+        # Check if milestone achieved
+        self._check_milestone_achievement()
+
         # Log portfolio status
         self._log_portfolio_status()
+
+        # Collect learning data
+        self._collect_learning_data()
         
     def _log_portfolio_status(self):
         """Log current portfolio status"""
@@ -627,27 +768,400 @@ class ShadowTradingBot:
             'patterns_learned': patterns_learned,
             'accuracy_score': accuracy,
             'market_conditions': market_conditions,
-            'recommendations': recommendations
+            'recommendations': recommendations,
+            'total_trades': total_orders,
+            'successful_trades': successful_trades,
+            'current_milestone_progress': self.portfolio.milestone_progress,
+            'target_amount': self.portfolio.target_amount,
+            'daily_trades_count': len(self.portfolio.daily_trades)
         }
 
+    def _update_milestone_progress(self):
+        """Update progress toward milestone target"""
+        if self.portfolio.target_amount:
+            progress = (self.portfolio.total_value - self.initial_capital) / (self.portfolio.target_amount - self.initial_capital)
+            self.portfolio.milestone_progress = max(0.0, min(1.0, progress))
+
+    def _calculate_milestone_position_size(self, symbol: str, price: float, expected_return: float) -> int:
+        """Calculate position size based on milestone progress and expected return"""
+        # Base calculation from risk manager
+        base_quantity = self.risk_manager.calculate_position_size(self.portfolio, symbol, price)
+
+        # Adjust based on milestone progress (more aggressive as we get closer)
+        milestone_multiplier = 1.0 + (self.portfolio.milestone_progress * 0.5)
+
+        # Adjust based on AI confidence/expected return
+        if expected_return > 0.03:  # High expected return
+            confidence_multiplier = 1.2
+        elif expected_return < -0.02:  # Negative expected return
+            confidence_multiplier = 0.5
+        else:
+            confidence_multiplier = 1.0
+
+        adjusted_quantity = int(base_quantity * milestone_multiplier * confidence_multiplier)
+        return min(adjusted_quantity, 200)  # Cap at 200 shares
+
+    def _check_milestone_achievement(self):
+        """Check if milestone has been achieved"""
+        if self.portfolio.milestone_progress >= 1.0:
+            logger.info(f"🎉 Milestone achieved! Portfolio value: ${self.portfolio.total_value:,.2f}")
+
+            # Record achievement
+            achievement_data = {
+                'timestamp': datetime.now(),
+                'initial_capital': self.initial_capital,
+                'final_value': self.portfolio.total_value,
+                'target_amount': self.portfolio.target_amount,
+                'total_return': (self.portfolio.total_value - self.initial_capital) / self.initial_capital,
+                'trading_days': len(self.daily_performance),
+                'total_trades': len(self.portfolio.orders)
+            }
+
+            # Save achievement data
+            self._save_milestone_achievement(achievement_data)
+
+    def _collect_learning_data(self):
+        """Collect data for machine learning improvements"""
+        if not self.enable_ml_learning:
+            return
+
+        # Analyze recent trades for learning
+        recent_trades = [order for order in self.portfolio.orders if
+                        (datetime.now() - order.timestamp).days <= 1]
+
+        for order in recent_trades:
+            # Calculate actual return if position was closed
+            if order.actual_return is None:
+                current_position = self.portfolio.positions.get(order.symbol)
+                if current_position:
+                    # Position still open - calculate unrealized return
+                    actual_return = (current_position.current_price - order.price) / order.price
+                else:
+                    # Position closed - find closing order
+                    closing_orders = [o for o in self.portfolio.orders if
+                                    o.symbol == order.symbol and
+                                    o.order_type != order.order_type and
+                                    o.timestamp > order.timestamp]
+                    if closing_orders:
+                        closing_order = closing_orders[0]
+                        if order.order_type == OrderType.BUY:
+                            actual_return = (closing_order.price - order.price) / order.price
+                        else:
+                            actual_return = (order.price - closing_order.price) / closing_order.price
+                        order.actual_return = actual_return
+
+                # Store learning data
+                learning_entry = {
+                    'symbol': order.symbol,
+                    'strategy': order.strategy,
+                    'ai_confidence': order.ai_confidence,
+                    'expected_return': order.expected_return,
+                    'actual_return': actual_return,
+                    'order_type': order.order_type.value,
+                    'timestamp': order.timestamp,
+                    'market_conditions': self._get_market_conditions()
+                }
+                self.learning_data.append(learning_entry)
+
+    def _get_market_conditions(self) -> Dict:
+        """Get current market conditions for learning analysis"""
+        try:
+            # Get S&P 500 as market indicator
+            spy_data = self.market_data.get_stock_data('SPY')
+            if spy_data:
+                return {
+                    'market_trend': 'bullish' if spy_data.change_percent > 0 else 'bearish',
+                    'market_volatility': abs(spy_data.change_percent),
+                    'timestamp': datetime.now()
+                }
+        except:
+            pass
+        return {'market_trend': 'neutral', 'market_volatility': 0.0, 'timestamp': datetime.now()}
+
+    def perform_daily_evaluation(self):
+        """Perform end-of-day evaluation and strategy learning"""
+        logger.info("🔍 Performing daily evaluation and strategy learning...")
+
+        current_date = datetime.now().date()
+        daily_trades = self.portfolio.daily_trades
+
+        if not daily_trades:
+            logger.info("No trades executed today.")
+            return
+
+        # Calculate daily performance metrics
+        daily_pnl = 0.0
+        winning_trades = 0
+        losing_trades = 0
+        total_ai_confidence = 0.0
+
+        for trade in daily_trades:
+            if trade.actual_return is not None:
+                pnl = trade.actual_return * trade.quantity * trade.price
+                daily_pnl += pnl
+
+                if pnl > 0:
+                    winning_trades += 1
+                else:
+                    losing_trades += 1
+
+                total_ai_confidence += trade.ai_confidence
+
+        # Calculate strategy performance
+        strategy_performance = {}
+        for trade in daily_trades:
+            if trade.strategy not in strategy_performance:
+                strategy_performance[trade.strategy] = {'trades': 0, 'pnl': 0.0, 'accuracy': 0.0}
+
+            strategy_performance[trade.strategy]['trades'] += 1
+            if trade.actual_return is not None:
+                pnl = trade.actual_return * trade.quantity * trade.price
+                strategy_performance[trade.strategy]['pnl'] += pnl
+
+        # Calculate accuracy for each strategy
+        for strategy in strategy_performance:
+            strategy_trades = [t for t in daily_trades if t.strategy == strategy and t.actual_return is not None]
+            if strategy_trades:
+                profitable_trades = len([t for t in strategy_trades if t.actual_return > 0])
+                strategy_performance[strategy]['accuracy'] = profitable_trades / len(strategy_trades)
+
+        # Store daily performance
+        daily_performance = {
+            'date': current_date,
+            'total_trades': len(daily_trades),
+            'daily_pnl': daily_pnl,
+            'winning_trades': winning_trades,
+            'losing_trades': losing_trades,
+            'win_rate': winning_trades / (winning_trades + losing_trades) if (winning_trades + losing_trades) > 0 else 0,
+            'avg_ai_confidence': total_ai_confidence / len(daily_trades) if daily_trades else 0,
+            'strategy_performance': strategy_performance,
+            'portfolio_value': self.portfolio.total_value,
+            'milestone_progress': self.portfolio.milestone_progress
+        }
+
+        self.daily_performance.append(daily_performance)
+
+        # Update strategy performance tracking
+        for strategy, perf in strategy_performance.items():
+            if strategy not in self.strategy_performance:
+                self.strategy_performance[strategy] = []
+            self.strategy_performance[strategy].append(perf)
+
+        # Learn and adapt strategies
+        self._adapt_strategies(daily_performance)
+
+        # Log results
+        logger.info(f"📊 Daily Performance Summary:")
+        logger.info(f"   Trades: {daily_performance['total_trades']}")
+        logger.info(f"   P&L: ${daily_pnl:,.2f}")
+        logger.info(f"   Win Rate: {daily_performance['win_rate']:.1%}")
+        logger.info(f"   Portfolio Value: ${self.portfolio.total_value:,.2f}")
+        logger.info(f"   Milestone Progress: {self.portfolio.milestone_progress:.1%}")
+
+        # Save evaluation data
+        self._save_daily_evaluation(daily_performance)
+
+    def _adapt_strategies(self, daily_performance: Dict):
+        """Adapt strategy parameters based on daily performance"""
+        if not self.enable_ml_learning:
+            return
+
+        # Find best performing strategy
+        best_strategy = None
+        best_pnl = float('-inf')
+
+        for strategy, perf in daily_performance['strategy_performance'].items():
+            if perf['pnl'] > best_pnl:
+                best_pnl = perf['pnl']
+                best_strategy = strategy
+
+        logger.info(f"🎯 Best performing strategy today: {best_strategy}")
+
+        # Adjust parameters based on performance
+        if best_strategy == 'ai_gemini' and best_strategy in self.strategies:
+            gemini_strategy = self.strategies[best_strategy]
+            if daily_performance['win_rate'] > 0.6:
+                # Lower confidence threshold for good performance
+                gemini_strategy.confidence_threshold = max(0.6, gemini_strategy.confidence_threshold - 0.05)
+                logger.info(f"🔧 Lowered AI confidence threshold to {gemini_strategy.confidence_threshold:.2f}")
+            elif daily_performance['win_rate'] < 0.4:
+                # Raise confidence threshold for poor performance
+                gemini_strategy.confidence_threshold = min(0.9, gemini_strategy.confidence_threshold + 0.05)
+                logger.info(f"🔧 Raised AI confidence threshold to {gemini_strategy.confidence_threshold:.2f}")
+
+    def _save_daily_evaluation(self, evaluation_data: Dict):
+        """Save daily evaluation data to file (cloud-compatible)"""
+        try:
+            # Check if we're in a cloud environment
+            is_cloud = os.environ.get('GAE_APPLICATION') or os.environ.get('GOOGLE_CLOUD_PROJECT')
+
+            if is_cloud:
+                # In cloud environment, log the evaluation data instead of saving to file
+                eval_data = evaluation_data.copy()
+                eval_data['date'] = eval_data['date'].isoformat()
+                logger.info(f"📄 Daily evaluation data: {json.dumps(eval_data, indent=2, default=str)}")
+            else:
+                # Local environment - save to file
+                filename = f"daily_evaluation_{datetime.now().strftime('%Y%m%d')}.json"
+                with open(filename, 'w') as f:
+                    eval_data = evaluation_data.copy()
+                    eval_data['date'] = eval_data['date'].isoformat()
+                    json.dump(eval_data, f, indent=2, default=str)
+                logger.info(f"📄 Daily evaluation saved to {filename}")
+        except Exception as e:
+            logger.error(f"Error saving daily evaluation: {e}")
+
+    def _save_milestone_achievement(self, achievement_data: Dict):
+        """Save milestone achievement data (cloud-compatible)"""
+        try:
+            # Check if we're in a cloud environment
+            is_cloud = os.environ.get('GAE_APPLICATION') or os.environ.get('GOOGLE_CLOUD_PROJECT')
+
+            if is_cloud:
+                # In cloud environment, log the achievement data instead of saving to file
+                logger.info(f"🏆 Milestone achievement data: {json.dumps(achievement_data, indent=2, default=str)}")
+            else:
+                # Local environment - save to file
+                filename = f"milestone_achievement_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+                with open(filename, 'w') as f:
+                    json.dump(achievement_data, f, indent=2, default=str)
+                logger.info(f"🏆 Milestone achievement saved to {filename}")
+        except Exception as e:
+            logger.error(f"Error saving milestone achievement: {e}")
+
+    def get_strategy_insights(self) -> Dict:
+        """Get insights about strategy performance"""
+        if not self.strategy_performance:
+            return {'message': 'No strategy performance data available yet'}
+
+        insights = {}
+        for strategy, performances in self.strategy_performance.items():
+            if not performances:
+                continue
+
+            total_trades = sum(p['trades'] for p in performances)
+            total_pnl = sum(p['pnl'] for p in performances)
+            avg_accuracy = sum(p['accuracy'] for p in performances) / len(performances)
+
+            insights[strategy] = {
+                'total_trades': total_trades,
+                'total_pnl': total_pnl,
+                'average_accuracy': avg_accuracy,
+                'performance_trend': 'improving' if len(performances) > 1 and performances[-1]['pnl'] > performances[-2]['pnl'] else 'declining'
+            }
+
+        return insights
+
+    def schedule_daily_evaluation(self, hour: int = 16):  # 4 PM market close
+        """Schedule daily evaluation at market close"""
+        import schedule
+
+        def run_evaluation():
+            self.perform_daily_evaluation()
+
+        schedule.every().day.at(f"{hour:02d}:00").do(run_evaluation)
+        logger.info(f"⏰ Scheduled daily evaluation at {hour}:00")
+
 if __name__ == "__main__":
-    # Create and start the trading bot
-    bot = ShadowTradingBot(initial_capital=100000.0)
-    
+    # Enhanced Shadow Trading Bot with Gemini AI Integration
+    print("🤖 Starting Enhanced AI Shadow Trading Bot...")
+    print("="*60)
+
+    # Configuration
+    initial_capital = 100000.0  # $100k starting capital
+    target_amount = 110000.0    # $110k target (10% gain)
+
+    # Create enhanced trading bot
+    bot = ShadowTradingBot(
+        initial_capital=initial_capital,
+        target_amount=target_amount,
+        trading_strategy='ai_gemini',  # Use Gemini AI strategy
+        enable_ml_learning=True,
+        milestone_target_percent=0.1   # 10% target
+    )
+
+    # Add popular day trading stocks to watchlist
+    watchlist_symbols = ['AAPL', 'TSLA', 'MSFT', 'GOOGL', 'NVDA', 'AMD', 'AMZN', 'META']
+    for symbol in watchlist_symbols:
+        bot.add_to_watchlist(symbol)
+
+    # Schedule daily evaluation at market close (4 PM EST)
+    bot.schedule_daily_evaluation(hour=16)
+
+    print(f"💰 Initial Capital: ${initial_capital:,.2f}")
+    print(f"🎯 Target Amount: ${target_amount:,.2f}")
+    print(f"📈 Strategy: Gemini AI-Powered Day Trading")
+    print(f"📊 Watchlist: {', '.join(watchlist_symbols)}")
+    print(f"🔄 Trading Interval: Every 5 minutes")
+    print(f"📅 Daily Evaluation: 4:00 PM EST")
+    print("="*60)
+
     try:
-        bot.start(interval=300)  # Run every 5 minutes
+        # Start the enhanced trading bot
+        bot.start(interval=300)  # Run every 5 minutes for day trading
     except KeyboardInterrupt:
         bot.stop()
-        print("\nTrading bot stopped.")
-        
-        # Print final performance report
+        print("\n🛑 Trading bot stopped by user.")
+
+        # Perform final evaluation
+        bot.perform_daily_evaluation()
+
+        # Print comprehensive final report
         report = bot.get_performance_report()
-        print("\n" + "="*50)
-        print("FINAL PERFORMANCE REPORT")
-        print("="*50)
-        print(f"Initial Capital: ${report['initial_capital']:,.2f}")
-        print(f"Final Value: ${report['current_value']:,.2f}")
-        print(f"Total Return: {report['total_return_pct']:.2f}%")
-        print(f"Cash: ${report['cash']:,.2f}")
-        print(f"Positions: {report['positions_count']}")
-        print(f"Total Orders: {report['orders_count']}")
+        ml_insights = bot.get_ml_insights()
+        strategy_insights = bot.get_strategy_insights()
+
+        print("\n" + "="*60)
+        print("🏁 FINAL PERFORMANCE REPORT")
+        print("="*60)
+        print(f"📊 Portfolio Performance:")
+        print(f"   Initial Capital: ${report['initial_capital']:,.2f}")
+        print(f"   Final Value: ${report['current_value']:,.2f}")
+        print(f"   Total Return: ${report['total_return_pct']:.2f}%")
+        print(f"   Cash Available: ${report['cash']:,.2f}")
+        print(f"   Active Positions: {report['positions_count']}")
+        print(f"   Total Orders: {report['orders_count']}")
+        print()
+
+        print(f"🎯 Milestone Progress:")
+        print(f"   Target Amount: ${target_amount:,.2f}")
+        print(f"   Progress: {bot.portfolio.milestone_progress:.1%}")
+        print(f"   Daily Trades: {len(bot.portfolio.daily_trades)}")
+
+        if bot.portfolio.milestone_progress >= 1.0:
+            print("   🎉 MILESTONE ACHIEVED! 🎉")
+        else:
+            remaining = target_amount - report['current_value']
+            print(f"   Remaining to Target: ${remaining:,.2f}")
+        print()
+
+        print(f"🤖 AI Performance:")
+        print(f"   Patterns Learned: {ml_insights['patterns_learned']}")
+        print(f"   Model Accuracy: {ml_insights['accuracy_score']:.1%}")
+        print(f"   Market Conditions: {ml_insights['market_conditions']}")
+        print(f"   Total AI Trades: {ml_insights['total_trades']}")
+        print(f"   Successful Trades: {ml_insights['successful_trades']}")
+        print()
+
+        if strategy_insights and 'message' not in strategy_insights:
+            print(f"📈 Strategy Insights:")
+            for strategy, data in strategy_insights.items():
+                print(f"   {strategy}:")
+                print(f"     Total Trades: {data['total_trades']}")
+                print(f"     Total P&L: ${data['total_pnl']:,.2f}")
+                print(f"     Accuracy: {data['average_accuracy']:.1%}")
+                print(f"     Trend: {data['performance_trend']}")
+
+        print("\n💡 AI Recommendations:")
+        for rec in ml_insights['recommendations']:
+            print(f"   • {rec}")
+
+        print("\n📁 Data Files:")
+        print("   • Daily evaluation saved to daily_evaluation_YYYYMMDD.json")
+        if bot.portfolio.milestone_progress >= 1.0:
+            print("   • Milestone achievement saved to milestone_achievement_YYYYMMDD_HHMMSS.json")
+        print("   • Trading log saved to trading_bot.log")
+
+        print("\n" + "="*60)
+        print("✅ Enhanced AI Shadow Trading Session Complete")
+        print("="*60)

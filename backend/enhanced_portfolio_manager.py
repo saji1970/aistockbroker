@@ -256,6 +256,10 @@ class EnhancedPortfolioManager:
                         'transaction_id': None
                     }
             
+            # Ensure quantity and price are numeric
+            quantity = float(quantity)
+            price = float(price)
+            
             # Calculate total cost including fees
             total_cost = quantity * price
             fees = total_cost * self.config.trading_fees
@@ -378,6 +382,10 @@ class EnhancedPortfolioManager:
                         'error': f'Could not fetch current price for {symbol}',
                         'transaction_id': None
                     }
+            
+            # Ensure quantity and price are numeric
+            quantity = float(quantity)
+            price = float(price)
             
             # Calculate proceeds and fees
             gross_proceeds = quantity * price
@@ -547,17 +555,21 @@ class EnhancedPortfolioManager:
                 'config': asdict(self.config)
             }
             
-            # Convert datetime objects to strings
-            def convert_datetime(obj):
+            # Convert datetime objects to strings and enums to values
+            def convert_for_json(obj):
                 if isinstance(obj, datetime):
                     return obj.isoformat()
+                elif hasattr(obj, '__class__') and obj.__class__.__name__ == 'AssetType':
+                    return obj.value  # Convert enum to its value
+                elif hasattr(obj, '__class__') and obj.__class__.__name__ == 'TransactionType':
+                    return obj.value  # Convert enum to its value
                 elif isinstance(obj, dict):
-                    return {k: convert_datetime(v) for k, v in obj.items()}
+                    return {k: convert_for_json(v) for k, v in obj.items()}
                 elif isinstance(obj, list):
-                    return [convert_datetime(item) for item in obj]
+                    return [convert_for_json(item) for item in obj]
                 return obj
             
-            portfolio_data = convert_datetime(portfolio_data)
+            portfolio_data = convert_for_json(portfolio_data)
             
             # Save to file
             filename = f"portfolio_{self.portfolio_id}.json"

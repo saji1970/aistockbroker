@@ -25,7 +25,6 @@ gunicorn>=21.2.0
 
 # Database
 sqlalchemy>=2.0.0
-sqlite3
 
 # Trading and Finance
 alpha-vantage>=2.3.0
@@ -37,6 +36,7 @@ pytz>=2023.3
 python-dateutil>=2.8.0
 schedule>=1.2.0
 psutil>=5.9.0
+websocket-client>=1.6.0
 
 # Development
 pytest>=7.4.0
@@ -48,6 +48,7 @@ mypy>=1.5.0
 # Security
 cryptography>=41.0.0
 bcrypt>=4.0.0
+pyjwt>=2.8.0
 
 # Cloud Services
 google-cloud-storage>=2.10.0

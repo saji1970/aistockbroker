@@ -1,0 +1,35 @@
+steps:
+  # Build frontend image with port fix
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['build', '-f', 'Dockerfile.frontend', '-t', 'gcr.io/$PROJECT_ID/ai-stock-trading-frontend:fixed', '.']
+
+  # Push the image
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['push', 'gcr.io/$PROJECT_ID/ai-stock-trading-frontend:fixed']
+
+  # Deploy to Cloud Run with the correct port configuration
+  - name: 'gcr.io/cloud-builders/gcloud'
+    args:
+      - 'run'
+      - 'deploy'
+      - 'ai-stock-trading-frontend'
+      - '--image'
+      - 'gcr.io/$PROJECT_ID/ai-stock-trading-frontend:fixed'
+      - '--region'
+      - 'us-central1'
+      - '--platform'
+      - 'managed'
+      - '--allow-unauthenticated'
+      - '--memory'
+      - '1Gi'
+      - '--cpu'
+      - '1'
+      - '--max-instances'
+      - '5'
+      - '--timeout'
+      - '300'
+      - '--set-env-vars'
+      - 'REACT_APP_API_URL=https://ai-stock-trading-api-o6i75igepq-uc.a.run.app'
+
+images:
+  - 'gcr.io/$PROJECT_ID/ai-stock-trading-frontend:fixed'

@@ -1,0 +1,5 @@
+{
+  "admin_token": "admin_access_token_123",
+  "trader_token": "trader_access_token_456",
+  "customer_token": "customer_access_token_789"
+}

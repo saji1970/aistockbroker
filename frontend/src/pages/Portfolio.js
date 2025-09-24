@@ -36,20 +36,34 @@ const Portfolio = () => {
   // Transform backend data structure to match frontend expectations
   const transformPortfolioData = (data) => {
     if (!data) return portfolio;
-    
+
+    // Ensure positions is always an array
+    let positions = [];
+    if (Array.isArray(data.assets)) {
+      positions = data.assets;
+    } else if (Array.isArray(data.positions)) {
+      positions = data.positions;
+    } else if (data.assets && typeof data.assets === 'object') {
+      // If assets is an object, convert to array
+      positions = Object.values(data.assets);
+    } else if (data.positions && typeof data.positions === 'object') {
+      // If positions is an object, convert to array
+      positions = Object.values(data.positions);
+    }
+
     return {
       totalValue: data.total_value || data.totalValue || 0,
       cash: data.available_cash || data.cash || 0,
-      positions: data.assets || data.positions || [], // Backend returns 'assets', frontend expects 'positions'
+      positions: positions,
       performance: data.performance || {},
       lastUpdated: data.lastUpdated || new Date().toISOString(),
     };
   };
 
-  // Fetch portfolio data
+  // Fetch portfolio data using enhanced API
   const { data: portfolioData, isLoading: portfolioLoading } = useQuery(
     ['portfolio', currentMarket],
-    () => portfolioAPI.getPortfolio(currentMarket),
+    () => portfolioAPI.refreshPortfolio(),
     { enabled: !!currentMarket }
   );
 
@@ -71,7 +85,7 @@ const Portfolio = () => {
   const buyStockMutation = useMutation(
     async ({ symbol, shares, market }) => {
       // Use enhanced API - it will fetch real-time price automatically
-      return portfolioAPI.buyStock(symbol, shares, market);
+      return portfolioAPI.buyStock(symbol, shares);
     },
     {
       onSuccess: (data, variables) => {
@@ -90,7 +104,7 @@ const Portfolio = () => {
   const sellStockMutation = useMutation(
     async ({ symbol, shares, market }) => {
       // Use enhanced API - it will fetch real-time price automatically
-      return portfolioAPI.sellStock(symbol, shares, market);
+      return portfolioAPI.sellStock(symbol, shares);
     },
     {
       onSuccess: (data, variables) => {
@@ -252,7 +266,7 @@ const Portfolio = () => {
             <div>
               <p className="text-sm text-gray-600">Positions</p>
               <p className="text-2xl font-bold text-gray-900">
-                {currentPortfolio.positions?.length || 0}
+                {Array.isArray(currentPortfolio.positions) ? currentPortfolio.positions.length : 0}
               </p>
             </div>
             <div className="w-8 h-8 bg-purple-100 rounded-full flex items-center justify-center">
@@ -366,50 +380,61 @@ const Portfolio = () => {
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
-              {currentPortfolio.positions?.map((position) => (
-                <tr key={position.symbol} className="hover:bg-gray-50">
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="text-sm font-medium text-gray-900">{position.symbol}</div>
-                    <div className="text-sm text-gray-500">{position.name}</div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    {position.quantity}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    {marketInfo.currency}{position.currentPrice?.toFixed(2)}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    {marketInfo.currency}{(position.quantity * position.currentPrice)?.toFixed(2)}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <span className={`text-sm font-medium ${position.return >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                      {position.return >= 0 ? '+' : ''}{position.return?.toFixed(2)}%
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getRiskColor(position.risk)}`}>
-                      {position.risk}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                    <button
-                      onClick={() => setSelectedAsset(position)}
-                      className="text-blue-600 hover:text-blue-900 mr-3"
-                    >
-                      View
-                    </button>
-                    <button
-                      onClick={() => {
-                        setSellSymbol(position.symbol);
-                        setSellShares(position.quantity.toString());
-                      }}
-                      className="text-red-600 hover:text-red-900"
-                    >
-                      Sell
-                    </button>
+              {(Array.isArray(currentPortfolio.positions) ? currentPortfolio.positions : []).length === 0 ? (
+                <tr>
+                  <td colSpan="7" className="px-6 py-12 text-center text-gray-500">
+                    <div className="space-y-2">
+                      <p className="text-lg font-medium">No positions yet</p>
+                      <p className="text-sm">Start by buying your first stock</p>
+                    </div>
                   </td>
                 </tr>
-              ))}
+              ) : (
+                (Array.isArray(currentPortfolio.positions) ? currentPortfolio.positions : []).map((position) => (
+                  <tr key={position.symbol} className="hover:bg-gray-50">
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="text-sm font-medium text-gray-900">{position.symbol || 'N/A'}</div>
+                      <div className="text-sm text-gray-500">{position.name || position.symbol}</div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                      {position.quantity || 0}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                      {marketInfo.currency}{(position.currentPrice || position.current_price || 0).toFixed(2)}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                      {marketInfo.currency}{((position.quantity || 0) * (position.currentPrice || position.current_price || 0)).toFixed(2)}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <span className={`text-sm font-medium ${(position.return || 0) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                        {(position.return || 0) >= 0 ? '+' : ''}{(position.return || 0).toFixed(2)}%
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getRiskColor(position.risk || 'medium')}`}>
+                        {position.risk || 'medium'}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                      <button
+                        onClick={() => setSelectedAsset(position)}
+                        className="text-blue-600 hover:text-blue-900 mr-3"
+                      >
+                        View
+                      </button>
+                      <button
+                        onClick={() => {
+                          setSellSymbol(position.symbol || '');
+                          setSellShares((position.quantity || 0).toString());
+                        }}
+                        className="text-red-600 hover:text-red-900"
+                      >
+                        Sell
+                      </button>
+                    </td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>

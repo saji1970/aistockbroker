@@ -1,0 +1,23 @@
+{
+  "portfolio": {
+    "id": "5921aace-08ae-40e2-8a02-8d3c237f06ec",
+    "name": "Main Portfolio",
+    "config": {
+      "investment_amount": 100000.0,
+      "risk_tolerance": "moderate",
+      "max_position_size": 0.2,
+      "min_position_size": 0.02,
+      "rebalance_threshold": 0.05,
+      "trading_fees": 0.001,
+      "auto_rebalance": true,
+      "stop_loss_percentage": 0.1,
+      "take_profit_percentage": 0.2
+    },
+    "total_capital": 100000.0,
+    "available_cash": 92269.32706832886,
+    "total_value": 101176.22694015503,
+    "assets": {
+      "AAPL": {
+        "symbol": "AAPL",
+        "name": "AAPL",
+        "asset_type": 

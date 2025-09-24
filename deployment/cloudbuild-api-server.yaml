@@ -1,5 +1,25 @@
 steps:
   - name: 'gcr.io/cloud-builders/docker'
-    args: ['build', '-f', 'Dockerfile.api-server', '-t', 'gcr.io/stockadvisor-463716/ai-stock-trading-api-server:latest', '.']
+    args: ['build', '-f', 'Dockerfile.api-server', '-t', 'gcr.io/stockbroker-28983/ai-stock-trading-api-server:latest', '.']
   - name: 'gcr.io/cloud-builders/docker'
-    args: ['push', 'gcr.io/stockadvisor-463716/ai-stock-trading-api-server:latest']
+    args: ['push', 'gcr.io/stockbroker-28983/ai-stock-trading-api-server:latest']
+  - name: 'gcr.io/cloud-builders/gcloud'
+    args:
+      - 'run'
+      - 'deploy'
+      - 'ai-stock-trading-api-server'
+      - '--image'
+      - 'gcr.io/stockbroker-28983/ai-stock-trading-api-server:latest'
+      - '--region'
+      - 'us-central1'
+      - '--platform'
+      - 'managed'
+      - '--allow-unauthenticated'
+      - '--port'
+      - '5001'
+      - '--memory'
+      - '1Gi'
+      - '--cpu'
+      - '1'
+      - '--max-instances'
+      - '10'
