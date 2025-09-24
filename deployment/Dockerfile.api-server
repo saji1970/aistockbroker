@@ -13,21 +13,8 @@ RUN apt-get update && apt-get install -y \
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy the API server and related files
-COPY api_server.py .
-COPY gemini_predictor.py .
-COPY data_fetcher.py .
-COPY technical_analysis.py .
-COPY sensitivity_analysis.py .
-COPY enhanced_portfolio_manager.py .
-COPY enhanced_auto_trader.py .
-COPY portfolio_manager.py .
-COPY financial_advisor.py .
-COPY backtest_engine.py .
-COPY config.py .
-COPY robo_trading_agent.py .
-COPY robo_trading_interface.py .
-COPY vertex_ai_predictor.py .
+# Copy the backend files
+COPY backend/ ./
 
 # Create logs directory
 RUN mkdir -p /app/logs
