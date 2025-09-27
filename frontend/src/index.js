@@ -83,7 +83,10 @@ const root = ReactDOM.createRoot(document.getElementById('root'));
 root.render(
   <React.StrictMode>
     <QueryClientProvider client={queryClient}>
-      <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+      <BrowserRouter 
+        future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
+        scrollRestoration="manual"
+      >
         <AuthProvider>
           <App />
           <Toaster

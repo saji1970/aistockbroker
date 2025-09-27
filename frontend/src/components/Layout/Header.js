@@ -1,6 +1,22 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { Bars3Icon, XMarkIcon, SparklesIcon, UserIcon, CogIcon, ShieldCheckIcon, ArrowRightOnRectangleIcon } from '@heroicons/react/24/outline';
+import { 
+  Bars3Icon, 
+  XMarkIcon, 
+  SparklesIcon, 
+  UserIcon, 
+  CogIcon, 
+  ShieldCheckIcon, 
+  ArrowRightOnRectangleIcon,
+  HomeIcon,
+  CpuChipIcon,
+  BriefcaseIcon,
+  ChartBarIcon,
+  BeakerIcon,
+  BoltIcon,
+  UserGroupIcon,
+  LightBulbIcon
+} from '@heroicons/react/24/outline';
 import { useStore } from '../../store/store';
 import { useAuth } from '../../contexts/AuthContext';
 import toast from 'react-hot-toast';
@@ -39,17 +55,12 @@ const Header = () => {
   }, [userMenuOpen]);
 
   const navigation = [
-    { name: 'Dashboard', href: '/dashboard', icon: '📊', description: 'Overview & Analytics' },
-    { name: 'AI Assistant', href: '/ai-assistant', icon: '🤖', description: 'AI Trading Assistant' },
-    { name: 'Portfolio', href: '/portfolio', icon: '💼', description: 'Portfolio Management' },
-    { name: 'Enhanced Portfolio', href: '/enhanced-portfolio', icon: '💎', description: 'Advanced Portfolio' },
-    { name: 'Analysis', href: '/analysis', icon: '📈', description: 'Market Analysis' },
-    { name: 'Trading Bot', href: '/trading-bot', icon: '🚀', description: 'Automated Trading' },
-    { name: 'Backtest', href: '/backtest', icon: '🧪', description: 'Strategy Testing' },
-    { name: 'AI Features', href: '/ai-features', icon: '⚡', description: 'AI Tools & Features' },
-    { name: 'Agent Dashboard', href: '/agent', icon: '👨‍💼', description: 'Agent Management' },
-    { name: 'Customers', href: '/agent/customers', icon: '👥', description: 'Customer Management' },
-    { name: 'Trade Suggestions', href: '/agent/suggestions', icon: '💡', description: 'AI Trade Suggestions' },
+    { name: 'Dashboard', href: '/dashboard', icon: HomeIcon, description: 'Overview & Analytics' },
+    { name: 'AI Assistant', href: '/ai-assistant', icon: CpuChipIcon, description: 'AI Trading Assistant' },
+    { name: 'Portfolio', href: '/portfolio', icon: BriefcaseIcon, description: 'Portfolio Management' },
+    { name: 'Trading Bot', href: '/trading-bot', icon: BoltIcon, description: 'Automated Trading' },
+    { name: 'Backtest', href: '/backtest', icon: BeakerIcon, description: 'Strategy Testing' },
+    { name: 'Agent Dashboard', href: '/agent', icon: UserIcon, description: 'Agent Management' },
   ];
 
   const handleLogout = async () => {
@@ -61,6 +72,33 @@ const Header = () => {
       toast.error('Error logging out');
     }
     setUserMenuOpen(false);
+  };
+
+  const handleNavigationClick = (e, href) => {
+    // Prevent default scrolling behavior
+    e.preventDefault();
+    
+    // Store current scroll position
+    const currentScrollY = window.scrollY;
+    
+    // Navigate without scrolling
+    navigate(href, { 
+      replace: false,
+      state: { preventScroll: true }
+    });
+    
+    // Multiple attempts to restore scroll position
+    setTimeout(() => {
+      window.scrollTo(0, currentScrollY);
+    }, 10);
+    
+    setTimeout(() => {
+      window.scrollTo(0, currentScrollY);
+    }, 100);
+    
+    setTimeout(() => {
+      window.scrollTo(0, currentScrollY);
+    }, 200);
   };
 
   const getUserDisplayName = () => {
@@ -129,6 +167,7 @@ const Header = () => {
                 <Link
                   key={item.name}
                   to={item.href}
+                  onClick={(e) => handleNavigationClick(e, item.href)}
                   className={`group relative px-4 py-2 rounded-xl text-sm font-medium transition-all duration-200 hover:-translate-y-0.5 ${
                     isActive
                       ? 'bg-primary-100 text-primary-700 shadow-sm'
@@ -136,7 +175,7 @@ const Header = () => {
                   }`}
                 >
                   <div className="flex items-center space-x-2">
-                    <span className="text-base">{item.icon}</span>
+                    <item.icon className="h-4 w-4" />
                     <span>{item.name}</span>
                   </div>
                   {/* Tooltip */}
@@ -157,7 +196,9 @@ const Header = () => {
                 href="/download.html"
                 className="btn-success text-sm px-4 py-2 inline-flex items-center space-x-2 group"
               >
-                <span className="text-base group-hover:animate-bounce">📱</span>
+                <svg className="h-4 w-4 group-hover:animate-bounce" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                </svg>
                 <span>Download App</span>
               </a>
             </div>
@@ -273,14 +314,17 @@ const Header = () => {
                       <Link
                         key={item.name}
                         to={item.href}
-                        onClick={toggleSidebar}
+                        onClick={(e) => {
+                          handleNavigationClick(e, item.href);
+                          toggleSidebar();
+                        }}
                         className={`flex items-center space-x-3 p-4 rounded-xl transition-all duration-200 hover:-translate-y-0.5 ${
                           isActive
                             ? 'bg-primary-100 text-primary-700 shadow-sm border-l-4 border-primary-500'
                             : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900 hover:shadow-sm'
                         }`}
                       >
-                        <span className="text-xl">{item.icon}</span>
+                        <item.icon className="h-5 w-5" />
                         <div>
                           <div className="font-medium">{item.name}</div>
                           <div className="text-xs text-gray-500">{item.description}</div>
@@ -301,7 +345,10 @@ const Header = () => {
                         </div>
                         <Link
                           to="/admin"
-                          onClick={toggleSidebar}
+                          onClick={(e) => {
+                            handleNavigationClick(e, '/admin');
+                            toggleSidebar();
+                          }}
                           className="flex items-center space-x-3 p-4 rounded-xl text-purple-600 hover:bg-purple-50 transition-all duration-200"
                         >
                           <ShieldCheckIcon className="h-5 w-5" />
@@ -312,7 +359,10 @@ const Header = () => {
                         </Link>
                         <Link
                           to="/admin/users"
-                          onClick={toggleSidebar}
+                          onClick={(e) => {
+                            handleNavigationClick(e, '/admin/users');
+                            toggleSidebar();
+                          }}
                           className="flex items-center space-x-3 p-4 rounded-xl text-purple-600 hover:bg-purple-50 transition-all duration-200"
                         >
                           <CogIcon className="h-5 w-5" />
@@ -347,7 +397,9 @@ const Header = () => {
                     onClick={toggleSidebar}
                     className="btn-success w-full justify-center text-base group"
                   >
-                    <span className="text-xl group-hover:animate-bounce mr-2">📱</span>
+                    <svg className="h-5 w-5 group-hover:animate-bounce mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                    </svg>
                     Download Mobile App
                   </a>
                 </div>

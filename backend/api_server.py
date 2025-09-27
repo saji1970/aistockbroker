@@ -5,10 +5,15 @@ Provides REST API endpoints for the React frontend
 """
 
 import os
-from dotenv import load_dotenv
+import re
 
-# Load environment variables from .env file
-load_dotenv()
+# Load environment variables from .env file (optional)
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    # dotenv not available, using environment variables directly
+    pass
 
 # Validate required environment variables
 if not os.environ.get('GOOGLE_API_KEY'):
@@ -60,19 +65,45 @@ app = Flask(__name__)
 cors_origins = [
     "http://localhost:3000",  # Local development
     "http://localhost:8080",  # Local API
-    "https://*.appspot.com",  # GCP App Engine
-    "https://*.web.app",      # Firebase Hosting
-    "https://*.firebaseapp.com",  # Firebase Hosting
+    "https://ai-stock-trading-frontend-1012090067429.us-central1.run.app",  # Deployed frontend
+    "https://ai-stock-trading-frontend-1012090067429.us-central1.run.app",  # Exact match for deployed frontend
+]
+
+# Add wildcard patterns for Cloud Run and other GCP services
+cors_regex_patterns = [
+    r"https://.*\.run\.app$",
+    r"https://.*\.appspot\.com$",
+    r"https://.*\.web\.app$",
+    r"https://.*\.firebaseapp\.com$"
 ]
 
 # Add custom domain if specified
 if os.environ.get('FRONTEND_URL'):
     cors_origins.append(os.environ.get('FRONTEND_URL'))
 
+# Configure CORS with more permissive settings for Cloud Run
 CORS(app,
      origins=cors_origins,
      allow_headers=["Content-Type", "Authorization", "X-CSRF-Token", "x-access-token", "X-Access-Token"],
-     methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"])
+     methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+     supports_credentials=True)
+
+# Add manual CORS headers for Cloud Run services
+@app.after_request
+def after_request(response):
+    """Add CORS headers for all responses"""
+    origin = request.headers.get('Origin')
+    if origin and (
+        origin in cors_origins or
+        any(re.match(pattern, origin) for pattern in cors_regex_patterns)
+    ):
+        response.headers['Access-Control-Allow-Origin'] = origin
+        response.headers['Access-Control-Allow-Credentials'] = 'true'
+        response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, X-CSRF-Token, x-access-token, X-Access-Token'
+        response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS'
+        response.headers['Access-Control-Max-Age'] = '86400'
+    
+    return response
 
 # Register user management blueprints
 from routes import auth_bp, user_bp

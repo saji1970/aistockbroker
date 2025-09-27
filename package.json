@@ -1,0 +1,13 @@
+{
+  "name": "ai-stock-trading-frontend-server",
+  "version": "1.0.0",
+  "description": "Static server for AI Stock Trading Frontend",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2"
+  }
+}
+

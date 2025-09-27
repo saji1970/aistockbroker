@@ -1,6 +1,32 @@
 steps:
   - name: 'gcr.io/cloud-builders/docker'
-    args: ['build', '-f', 'Dockerfile.api', '-t', 'gcr.io/$PROJECT_ID/ai-stock-trading-backend', '.']
+    args: ['build', '-f', 'deployment/Dockerfile.api-server', '-t', 'gcr.io/$PROJECT_ID/ai-stock-trading-backend', '.']
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['push', 'gcr.io/$PROJECT_ID/ai-stock-trading-backend']
+  - name: 'gcr.io/cloud-builders/gcloud'
+    args:
+      - 'run'
+      - 'deploy'
+      - 'ai-stock-trading-backend'
+      - '--image'
+      - 'gcr.io/$PROJECT_ID/ai-stock-trading-backend'
+      - '--region'
+      - 'us-central1'
+      - '--platform'
+      - 'managed'
+      - '--allow-unauthenticated'
+      - '--port'
+      - '8080'
+      - '--memory'
+      - '2Gi'
+      - '--cpu'
+      - '2'
+      - '--max-instances'
+      - '10'
+      - '--min-instances'
+      - '1'
+      - '--set-env-vars'
+      - 'GOOGLE_API_KEY=dummy_key_for_testing,FLASK_ENV=production'
 
 images:
   - 'gcr.io/$PROJECT_ID/ai-stock-trading-backend'

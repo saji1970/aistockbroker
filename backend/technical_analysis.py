@@ -1,6 +1,11 @@
 import pandas as pd
 import numpy as np
-import ta
+try:
+    import ta
+    TA_AVAILABLE = True
+except ImportError:
+    TA_AVAILABLE = False
+    print("Warning: ta library not available. Technical indicators will be limited.")
 from typing import Dict, List, Tuple
 import logging
 
@@ -10,7 +15,10 @@ class TechnicalAnalyzer:
     """Class for calculating technical indicators and analysis."""
     
     def __init__(self):
+        """Initialize the technical analyzer."""
         self.indicators = {}
+        if not TA_AVAILABLE:
+            logger.warning("Technical Analysis library (ta) not available. Limited functionality.")
     
     def calculate_all_indicators(self, data: pd.DataFrame) -> pd.DataFrame:
         """
@@ -22,6 +30,10 @@ class TechnicalAnalyzer:
         Returns:
             DataFrame with all indicators added
         """
+        if not TA_AVAILABLE:
+            logger.warning("TA library not available, returning data without indicators")
+            return data.copy()
+            
         try:
             # Make a copy to avoid modifying original data
             df = data.copy()
@@ -53,6 +65,10 @@ class TechnicalAnalyzer:
     
     def _add_moving_averages(self, df: pd.DataFrame) -> pd.DataFrame:
         """Add various moving averages."""
+        if not TA_AVAILABLE:
+            logger.warning("TA library not available, skipping moving averages")
+            return df
+            
         try:
             # Simple Moving Averages
             for period in [5, 10, 20, 50, 100, 200]:
@@ -77,6 +93,8 @@ class TechnicalAnalyzer:
     
     def _add_momentum_indicators(self, df: pd.DataFrame) -> pd.DataFrame:
         """Add momentum indicators."""
+        if not TA_AVAILABLE:
+            return df
         try:
             # RSI
             df['RSI'] = ta.momentum.rsi(df['Close'], window=14)
@@ -113,6 +131,8 @@ class TechnicalAnalyzer:
     
     def _add_volatility_indicators(self, df: pd.DataFrame) -> pd.DataFrame:
         """Add volatility indicators."""
+        if not TA_AVAILABLE:
+            return df
         try:
             # Bollinger Bands
             bb = ta.volatility.BollingerBands(df['Close'], window=20, window_dev=2)
@@ -146,6 +166,8 @@ class TechnicalAnalyzer:
     
     def _add_volume_indicators(self, df: pd.DataFrame) -> pd.DataFrame:
         """Add volume-based indicators."""
+        if not TA_AVAILABLE:
+            return df
         try:
             # Volume Weighted Average Price
             df['VWAP'] = ta.volume.volume_weighted_average_price(df['High'], df['Low'], df['Close'], df['Volume'])
@@ -177,6 +199,8 @@ class TechnicalAnalyzer:
     
     def _add_trend_indicators(self, df: pd.DataFrame) -> pd.DataFrame:
         """Add trend indicators."""
+        if not TA_AVAILABLE:
+            return df
         try:
             # Parabolic SAR
             df['PSAR'] = ta.trend.psar_up(df['High'], df['Low'], df['Close'])
@@ -212,6 +236,8 @@ class TechnicalAnalyzer:
     
     def _add_support_resistance(self, df: pd.DataFrame) -> pd.DataFrame:
         """Add support and resistance levels."""
+        if not TA_AVAILABLE:
+            return df
         try:
             # Pivot Points
             pp = ta.trend.PSARIndicator(df['High'], df['Low'], df['Close'])
@@ -280,8 +306,11 @@ class TechnicalAnalyzer:
     
     def calculate_rsi(self, prices: np.ndarray, window: int = 14) -> float:
         """Calculate RSI for a given price array."""
+        if not TA_AVAILABLE:
+            logger.warning("TA library not available, returning default RSI value")
+            return 50.0
+            
         try:
-            import ta
             # Convert to pandas Series if needed
             if isinstance(prices, np.ndarray):
                 prices = pd.Series(prices)

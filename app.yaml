@@ -1,0 +1,20 @@
+runtime: nodejs18
+service: ai-stock-frontend
+
+env_variables:
+  REACT_APP_API_URL: "https://ai-stock-trading-api-o6i75igepq-uc.a.run.app"
+
+handlers:
+  - url: /static
+    static_dir: frontend/build/static
+    secure: always
+
+  - url: /(.*)
+    static_files: frontend/build/index.html
+    upload: frontend/build/index.html
+    secure: always
+
+automatic_scaling:
+  min_instances: 1
+  max_instances: 3
+
