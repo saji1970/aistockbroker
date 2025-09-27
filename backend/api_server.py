@@ -66,7 +66,7 @@ cors_origins = [
     "http://localhost:3000",  # Local development
     "http://localhost:8080",  # Local API
     "https://ai-stock-trading-frontend-1012090067429.us-central1.run.app",  # Deployed frontend
-    "https://ai-stock-trading-frontend-1012090067429.us-central1.run.app",  # Exact match for deployed frontend
+    "https://ai-stock-trading-frontend-o6i75igepq-uc.a.run.app",  # Alternative frontend URL
 ]
 
 # Add wildcard patterns for Cloud Run and other GCP services

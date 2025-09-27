@@ -1,23 +1,37 @@
-# Use Node.js to serve the built React app
-FROM node:18-alpine
+# Build stage
+FROM node:18-alpine as build
 
-# Set working directory
 WORKDIR /app
 
 # Copy package files
 COPY package*.json ./
 
-# Install express for serving static files
-RUN npm install express
+# Install dependencies
+RUN npm ci
 
-# Copy built React app
-COPY build/ ./build/
+# Copy source code
+COPY . .
 
-# Copy server script
-COPY serve.js ./
+# Build the app
+RUN npm run build
+
+# Production stage
+FROM node:18-alpine
+
+WORKDIR /app
+
+# Copy package files
+COPY package*.json ./
+
+# Install only production dependencies
+RUN npm ci --only=production && npm cache clean --force
+
+# Copy built app and server files
+COPY --from=build /app/build ./build
+COPY server.js ./
 
 # Expose port
 EXPOSE 8080
 
 # Start the server
-CMD ["node", "serve.js"]
+CMD ["npm", "run", "serve"]
