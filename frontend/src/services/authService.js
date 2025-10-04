@@ -20,6 +20,12 @@ class AuthService {
 
     // Set up axios interceptor for automatic token inclusion
     this.setupAxiosInterceptors();
+
+    // Check for expired tokens on initialization
+    this.checkTokenValidity();
+    
+    // Clear any invalid tokens that might cause infinite loops
+    this.clearInvalidTokens();
   }
 
   setupAxiosInterceptors() {
@@ -43,8 +49,15 @@ class AuthService {
       async (error) => {
         const originalRequest = error.config;
 
-        if (error.response?.status === 401 && !originalRequest._retry) {
-          originalRequest._retry = true;
+        // Don't retry refresh-token endpoint to avoid infinite loops
+        const isRefreshTokenEndpoint = originalRequest.url && originalRequest.url.includes('/refresh-token');
+        
+        // Prevent infinite retry loops with a retry counter
+        const retryCount = originalRequest._retryCount || 0;
+        const maxRetries = 2;
+        
+        if (error.response?.status === 401 && retryCount < maxRetries && !isRefreshTokenEndpoint) {
+          originalRequest._retryCount = retryCount + 1;
 
           try {
             await this.refreshAuthToken();
@@ -52,10 +65,24 @@ class AuthService {
             originalRequest.headers.Authorization = `Bearer ${this.getToken()}`;
             return axios(originalRequest);
           } catch (refreshError) {
-            // Refresh failed, logout user
-            this.logout();
-            window.location.href = '/login';
+            // Refresh failed, clear auth data and redirect
+            console.warn('Token refresh failed, clearing auth data');
+            this.clearAuthData();
+            this.clearRefreshTimer();
+            if (window.location.pathname !== '/login') {
+              window.location.href = '/login';
+            }
             return Promise.reject(refreshError);
+          }
+        }
+
+        // If it's a refresh token endpoint that failed, clear auth data
+        if (isRefreshTokenEndpoint && error.response?.status === 401) {
+          console.warn('Refresh token endpoint failed, clearing auth data');
+          this.clearAuthData();
+          this.clearRefreshTimer();
+          if (window.location.pathname !== '/login') {
+            window.location.href = '/login';
           }
         }
 
@@ -302,7 +329,17 @@ class AuthService {
         throw new Error('Token refresh failed');
       }
     } catch (error) {
-      this.clearAuthData();
+      // If refresh token is invalid or expired, clear auth data immediately
+      if (error.response?.status === 401) {
+        console.warn('Refresh token is invalid or expired, clearing auth data');
+        this.clearAuthData();
+        this.clearRefreshTimer();
+        // Redirect to login page immediately
+        if (window.location.pathname !== '/login') {
+          window.location.href = '/login';
+        }
+        throw new Error('Refresh token expired');
+      }
       throw error;
     }
   }
@@ -337,6 +374,11 @@ class AuthService {
   scheduleTokenRefresh(expiresAt) {
     this.clearRefreshTimer();
 
+    // Don't schedule refresh if no refresh token is available
+    if (!this.refreshToken) {
+      return;
+    }
+
     const expirationTime = new Date(expiresAt);
     const now = new Date();
     const timeUntilExpiry = expirationTime.getTime() - now.getTime();
@@ -349,7 +391,10 @@ class AuthService {
         await this.refreshAuthToken();
       } catch (error) {
         console.error('Auto token refresh failed:', error);
-        this.logout();
+        // Only logout if refresh token is expired, not for network errors
+        if (error.message === 'Refresh token expired') {
+          this.logout();
+        }
       }
     }, refreshTime);
   }
@@ -460,6 +505,58 @@ class AuthService {
   setUser(user) {
     this.user = user;
     localStorage.setItem(USER_KEY, JSON.stringify(user));
+  }
+
+  /**
+   * Check token validity on initialization
+   */
+  checkTokenValidity() {
+    if (this.token && this.refreshToken) {
+      try {
+        // Check if token is expired by parsing JWT payload
+        const tokenParts = this.token.split('.');
+        if (tokenParts.length === 3) {
+          const payload = JSON.parse(atob(tokenParts[1]));
+          const currentTime = Math.floor(Date.now() / 1000);
+          
+          // If token is expired or expires within 5 minutes, clear auth data
+          if (payload.exp && payload.exp < currentTime + 300) {
+            console.warn('Token is expired or about to expire, clearing auth data');
+            this.clearAuthData();
+            this.clearRefreshTimer();
+          }
+        }
+      } catch (error) {
+        console.warn('Invalid token format, clearing auth data');
+        this.clearAuthData();
+        this.clearRefreshTimer();
+      }
+    }
+  }
+
+  /**
+   * Clear invalid tokens that might cause infinite loops
+   */
+  clearInvalidTokens() {
+    // If we have tokens but no user data, or if tokens look suspiciously old
+    if ((this.token || this.refreshToken) && !this.user) {
+      console.warn('Found tokens without user data, clearing auth data');
+      this.clearAuthData();
+      this.clearRefreshTimer();
+    }
+    
+    // Clear any tokens that are too short (likely invalid)
+    if (this.token && this.token.length < 50) {
+      console.warn('Token appears to be invalid (too short), clearing auth data');
+      this.clearAuthData();
+      this.clearRefreshTimer();
+    }
+    
+    if (this.refreshToken && this.refreshToken.length < 20) {
+      console.warn('Refresh token appears to be invalid (too short), clearing auth data');
+      this.clearAuthData();
+      this.clearRefreshTimer();
+    }
   }
 
   /**

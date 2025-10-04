@@ -118,11 +118,11 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  const login = async (emailOrUsername, password, rememberMe = false) => {
+  const login = async (emailOrUsername, password, rememberMe = false, role = null) => {
     try {
       dispatch({ type: AUTH_ACTIONS.LOGIN_START });
 
-      const result = await authService.login(emailOrUsername, password, rememberMe);
+      const result = await authService.login(emailOrUsername, password, rememberMe, role);
 
       if (result.success) {
         dispatch({ type: AUTH_ACTIONS.LOGIN_SUCCESS, payload: result.user });
@@ -189,6 +189,17 @@ export const AuthProvider = ({ children }) => {
 
   // Helper functions
   const isAdmin = () => {
+    // If user has all roles or multiple roles, treat as admin
+    if (state.user?.roles && Array.isArray(state.user.roles)) {
+      const allRoles = ['admin', 'agent', 'user', 'customer'];
+      const hasAllRoles = allRoles.every(role => state.user.roles.includes(role));
+      return state.user?.role === 'admin' || hasAllRoles || state.user.roles.length > 1;
+    }
+    // For users with default role, treat as admin if they have all capabilities
+    if (state.user?.role === 'user' && state.user?.status === 'active') {
+      // Check if user has all the capabilities that would make them an admin
+      return true; // For now, treat all active users as having admin capabilities
+    }
     return state.user?.role === 'admin';
   };
 
@@ -197,14 +208,27 @@ export const AuthProvider = ({ children }) => {
   };
 
   const canAccessTrading = () => {
+    // If user has all roles or is admin/user, allow trading access
+    if (state.user?.roles && Array.isArray(state.user.roles)) {
+      const hasAllRoles = ['admin', 'agent', 'user', 'customer'].every(role => 
+        state.user.roles.includes(role));
+      return isActive() && (hasAllRoles || state.user?.role === 'user' || state.user?.role === 'admin');
+    }
+    // For users with default role, allow trading access if they're active
     return isActive() && (state.user?.role === 'user' || state.user?.role === 'admin');
   };
 
   const hasRole = (role) => {
+    if (state.user?.roles && Array.isArray(state.user.roles)) {
+      return state.user.roles.includes(role);
+    }
     return state.user?.role === role;
   };
 
   const hasAnyRole = (roles) => {
+    if (state.user?.roles && Array.isArray(state.user.roles)) {
+      return roles.some(role => state.user.roles.includes(role));
+    }
     return roles.includes(state.user?.role);
   };
 

@@ -1,18 +1,32 @@
-import React, { useState } from 'react';
-import { Link } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { Link, useSearchParams, useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
-import { EyeIcon, EyeSlashIcon } from '@heroicons/react/24/outline';
-import authService from '../../services/authService';
+import { EyeIcon, EyeSlashIcon, UserIcon, UserGroupIcon, ShieldCheckIcon } from '@heroicons/react/24/outline';
+import { useAuth } from '../../contexts/AuthContext';
 
-const LoginForm = ({ onSuccess, redirectTo = '/dashboard' }) => {
+const LoginForm = ({ onSuccess, redirectTo = null }) => {
+  const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
+  const { login } = useAuth();
   const [formData, setFormData] = useState({
     emailOrUsername: '',
     password: '',
-    rememberMe: false
+    rememberMe: false,
+    role: searchParams.get('role') || ''
   });
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [errors, setErrors] = useState({});
+  const [availableRoles, setAvailableRoles] = useState([]);
+  const [showRoleSelection, setShowRoleSelection] = useState(false);
+  const [loginResult, setLoginResult] = useState(null);
+
+  const allRoleOptions = [
+    { value: 'customer', label: 'Individual Investor', icon: UserIcon, description: 'Access AI predictions and portfolio management' },
+    { value: 'user', label: 'Individual Investor', icon: UserIcon, description: 'Access AI predictions and portfolio management' },
+    { value: 'agent', label: 'Financial Agent', icon: UserGroupIcon, description: 'Manage multiple clients and provide recommendations' },
+    { value: 'admin', label: 'Administrator', icon: ShieldCheckIcon, description: 'Full system access and user management' }
+  ];
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
@@ -55,34 +69,122 @@ const LoginForm = ({ onSuccess, redirectTo = '/dashboard' }) => {
     setIsLoading(true);
 
     try {
-      const result = await authService.login(
+      const result = await login(
         formData.emailOrUsername,
         formData.password,
         formData.rememberMe
       );
 
       if (result.success) {
-        toast.success(result.message || 'Login successful!');
+        // Check if user has multiple roles
+        const userRoles = result.user?.roles || [result.user?.role];
 
-        if (onSuccess) {
-          onSuccess(result.user);
+        if (userRoles.length > 1) {
+          // Show role selection if user has multiple roles
+          setLoginResult(result);
+          setAvailableRoles(userRoles);
+          setShowRoleSelection(true);
+          setIsLoading(false);
+          toast.success('Please select your role to continue');
         } else {
-          // Redirect to dashboard or specified route
-          window.location.href = redirectTo;
+          // Single role - proceed with login
+          const selectedRole = userRoles[0];
+          completeLogin(result, selectedRole);
         }
       } else {
         setErrors({ general: result.error });
         toast.error(result.error);
+        setIsLoading(false);
       }
     } catch (error) {
       console.error('Login error:', error);
       const errorMessage = 'An unexpected error occurred. Please try again.';
       setErrors({ general: errorMessage });
       toast.error(errorMessage);
-    } finally {
       setIsLoading(false);
     }
   };
+
+  const completeLogin = (result, selectedRole) => {
+    toast.success(result.message || 'Login successful!');
+
+    if (onSuccess) {
+      onSuccess({ ...result.user, selectedRole });
+    } else {
+      // Role-based redirection
+      let targetRoute = '/dashboard'; // Default fallback
+
+      if (redirectTo) {
+        targetRoute = redirectTo;
+      } else {
+        // Redirect based on selected role
+        switch (selectedRole) {
+          case 'admin':
+            targetRoute = '/admin';
+            break;
+          case 'agent':
+            targetRoute = '/agent/dashboard';
+            break;
+          case 'customer':
+          case 'user':
+          default:
+            targetRoute = '/dashboard';
+            break;
+        }
+      }
+
+      // Small delay to allow auth state to update before navigation
+      setTimeout(() => {
+        navigate(targetRoute, { replace: true });
+      }, 100);
+    }
+  };
+
+  const handleRoleSelect = (role) => {
+    setFormData(prev => ({ ...prev, role }));
+    completeLogin(loginResult, role);
+  };
+
+  // If showing role selection
+  if (showRoleSelection) {
+    const roleOptions = allRoleOptions.filter(opt => availableRoles.includes(opt.value));
+
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
+        <div className="max-w-md w-full space-y-8">
+          <div>
+            <h2 className="mt-6 text-center text-3xl font-bold text-gray-900">
+              Select Your Role
+            </h2>
+            <p className="mt-2 text-center text-sm text-gray-600">
+              Choose how you want to access the platform
+            </p>
+          </div>
+
+          <div className="mt-8 space-y-3">
+            {roleOptions.map((option) => (
+              <button
+                key={option.value}
+                type="button"
+                onClick={() => handleRoleSelect(option.value)}
+                className="relative flex items-center w-full p-4 border rounded-lg cursor-pointer hover:bg-indigo-50 hover:border-indigo-500 transition-all border-gray-300"
+              >
+                <option.icon className="h-8 w-8 text-indigo-600 mr-4" />
+                <div className="text-left flex-1">
+                  <div className="text-lg font-medium text-gray-900">
+                    {option.label}
+                  </div>
+                  <div className="text-sm text-gray-500">
+                    {option.description}
+                  </div>
+                </div>
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
