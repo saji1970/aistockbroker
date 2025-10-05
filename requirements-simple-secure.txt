@@ -1,0 +1,28 @@
+# Simple Secure Backend Requirements
+# AI Stock Trading Platform - Security Enhanced Version (Simplified)
+
+# Core Framework
+Flask==2.3.3
+Flask-CORS==4.0.0
+
+# Basic Security
+cryptography==41.0.7
+
+# Data Validation
+bleach==6.0.0
+
+# Production Server
+gunicorn==21.2.0
+
+# Environment & Configuration
+python-dotenv==1.0.0
+
+# Logging
+structlog==23.1.0
+
+# Testing
+pytest==7.4.3
+
+# Development Dependencies
+black==23.11.0
+flake8==6.1.0

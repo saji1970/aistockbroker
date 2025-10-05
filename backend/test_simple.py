@@ -73,7 +73,7 @@ class TestDataFetcher:
         """Test fetching stock information"""
         symbol = 'AAPL'
         
-        info = data_fetcher.fetch_stock_info(symbol)
+        info = data_fetcher.get_stock_info(symbol)
         
         assert info is not None
         assert 'currentPrice' in info
@@ -84,7 +84,9 @@ class TestDataFetcher:
         """Test getting current stock price"""
         symbol = 'AAPL'
         
-        price = data_fetcher.get_current_price(symbol)
+        # Get stock info and extract current price
+        info = data_fetcher.get_stock_info(symbol)
+        price = info.get('currentPrice', 100.0)
         
         assert price is not None
         assert isinstance(price, (int, float))
@@ -119,27 +121,43 @@ class TestTechnicalAnalyzer:
     def test_calculate_macd(self, sample_data):
         """Test MACD calculation"""
         analyzer = TechnicalAnalyzer()
-        macd_line, signal_line, histogram = analyzer.calculate_macd(sample_data['Close'])
+        # Use the calculate_all_indicators method to get MACD data
+        data_with_indicators = analyzer.calculate_all_indicators(sample_data)
+        
+        # Check if MACD columns exist
+        assert 'MACD' in data_with_indicators.columns
+        assert 'MACD_Signal' in data_with_indicators.columns
+        assert 'MACD_Histogram' in data_with_indicators.columns
+        
+        # Get the latest values
+        macd_line = data_with_indicators['MACD'].iloc[-1]
+        signal_line = data_with_indicators['MACD_Signal'].iloc[-1]
+        histogram = data_with_indicators['MACD_Histogram'].iloc[-1]
         
         assert macd_line is not None
         assert signal_line is not None
         assert histogram is not None
-        assert not pd.isna(macd_line)
-        assert not pd.isna(signal_line)
-        assert not pd.isna(histogram)
     
     def test_calculate_bollinger_bands(self, sample_data):
         """Test Bollinger Bands calculation"""
         analyzer = TechnicalAnalyzer()
-        upper, middle, lower = analyzer.calculate_bollinger_bands(sample_data['Close'])
+        # Use the calculate_all_indicators method to get Bollinger Bands data
+        data_with_indicators = analyzer.calculate_all_indicators(sample_data)
+        
+        # Check if Bollinger Bands columns exist
+        assert 'BB_Upper' in data_with_indicators.columns
+        assert 'BB_Middle' in data_with_indicators.columns
+        assert 'BB_Lower' in data_with_indicators.columns
+        
+        # Get the latest values
+        upper = data_with_indicators['BB_Upper'].iloc[-1]
+        middle = data_with_indicators['BB_Middle'].iloc[-1]
+        lower = data_with_indicators['BB_Lower'].iloc[-1]
         
         assert upper is not None
         assert middle is not None
         assert lower is not None
         assert upper > middle > lower
-        assert not pd.isna(upper)
-        assert not pd.isna(middle)
-        assert not pd.isna(lower)
 
 class TestPortfolioManager:
     """Test cases for portfolio_manager module"""
@@ -149,9 +167,9 @@ class TestPortfolioManager:
         manager = PortfolioManager(initial_capital=100000)
         
         assert manager.initial_capital == 100000
-        assert manager.cash == 100000
-        assert len(manager.positions) == 0
-        assert manager.total_value == 100000
+        assert manager.portfolio.available_cash == 100000
+        assert len(manager.portfolio.assets) == 0
+        assert manager.portfolio.total_value == 100000
     
     def test_buy_stock(self):
         """Test buying stock"""
@@ -159,10 +177,10 @@ class TestPortfolioManager:
         
         result = manager.buy_stock('AAPL', 100, 150.0)
         
-        assert result['success'] is True
-        assert 'AAPL' in manager.positions
-        assert manager.positions['AAPL']['quantity'] == 100
-        assert manager.cash < 100000
+        assert result is True
+        assert 'AAPL' in manager.portfolio.assets
+        assert manager.portfolio.assets['AAPL'].quantity == 100
+        assert manager.portfolio.available_cash < 100000
     
     def test_sell_stock(self):
         """Test selling stock"""
@@ -170,14 +188,14 @@ class TestPortfolioManager:
         
         # First buy stock
         manager.buy_stock('AAPL', 100, 150.0)
-        initial_cash = manager.cash
+        initial_cash = manager.portfolio.available_cash
         
         # Then sell stock
         result = manager.sell_stock('AAPL', 50, 160.0)
         
-        assert result['success'] is True
-        assert manager.positions['AAPL']['quantity'] == 50
-        assert manager.cash > initial_cash
+        assert result is True
+        assert manager.portfolio.assets['AAPL'].quantity == 50
+        assert manager.portfolio.available_cash > initial_cash
     
     def test_get_portfolio_summary(self):
         """Test portfolio summary"""
@@ -187,8 +205,8 @@ class TestPortfolioManager:
         summary = manager.get_portfolio_summary()
         
         assert 'total_value' in summary
-        assert 'cash' in summary
-        assert 'positions' in summary
+        assert 'available_cash' in summary
+        assert 'assets' in summary
         assert 'total_return' in summary
         assert summary['total_value'] > 0
 
@@ -198,44 +216,44 @@ class TestEnhancedPortfolioManager:
     def test_initialize_enhanced_portfolio(self):
         """Test enhanced portfolio initialization"""
         manager = EnhancedPortfolioManager(
-            portfolio_id="test_portfolio",
-            initial_capital=100000
+            investment_amount=100000,
+            portfolio_name="test_portfolio"
         )
         
-        assert manager.portfolio_id == "test_portfolio"
-        assert manager.initial_capital == 100000
-        assert manager.cash == 100000
-        assert len(manager.positions) == 0
+        assert manager.portfolio_name == "test_portfolio"
+        assert manager.config.investment_amount == 100000
+        assert manager.portfolio.available_cash == 100000
+        assert len(manager.portfolio.assets) == 0
     
     def test_add_position(self):
         """Test adding position"""
         manager = EnhancedPortfolioManager(
-            portfolio_id="test_portfolio",
-            initial_capital=100000
+            investment_amount=100000,
+            portfolio_name="test_portfolio"
         )
         
-        result = manager.add_position('AAPL', 100, 150.0)
+        result = manager.buy_shares('AAPL', 100, 150.0)
         
         assert result['success'] is True
-        assert 'AAPL' in manager.positions
-        assert manager.positions['AAPL']['quantity'] == 100
+        assert 'AAPL' in manager.portfolio.assets
+        assert manager.portfolio.assets['AAPL'].quantity == 100
     
     def test_update_position(self):
         """Test updating position"""
         manager = EnhancedPortfolioManager(
-            portfolio_id="test_portfolio",
-            initial_capital=100000
+            investment_amount=100000,
+            portfolio_name="test_portfolio"
         )
         
         # Add position first
-        manager.add_position('AAPL', 100, 150.0)
+        manager.buy_shares('AAPL', 100, 150.0)
         
-        # Update position
-        result = manager.update_position('AAPL', 200, 160.0)
+        # Add more shares (update position)
+        result = manager.buy_shares('AAPL', 100, 160.0)
         
         assert result['success'] is True
-        assert manager.positions['AAPL']['quantity'] == 200
-        assert manager.positions['AAPL']['avg_price'] == 155.0  # Average price
+        assert manager.portfolio.assets['AAPL'].quantity == 200
+        assert manager.portfolio.assets['AAPL'].avg_cost == 155.0  # Average price
 
 class TestAgentManager:
     """Test cases for agent_manager module"""

@@ -1,0 +1,74 @@
+{
+  "portfolio": {
+    "id": "4bb16e97-d243-4e1c-9606-9ebc0f9e9113",
+    "name": "test_portfolio",
+    "config": {
+      "investment_amount": 100000,
+      "risk_tolerance": "moderate",
+      "max_position_size": 0.2,
+      "min_position_size": 0.02,
+      "rebalance_threshold": 0.05,
+      "trading_fees": 0.001,
+      "auto_rebalance": true,
+      "stop_loss_percentage": 0.1,
+      "take_profit_percentage": 0.2
+    },
+    "total_capital": 100000,
+    "available_cash": 84985.0,
+    "total_value": 99985.0,
+    "assets": {
+      "AAPL": {
+        "symbol": "AAPL",
+        "name": "AAPL",
+        "asset_type": "STOCK",
+        "current_price": 150.0,
+        "quantity": 100.0,
+        "avg_cost": 150.0,
+        "target_allocation": 0.0,
+        "market_value": 15000.0,
+        "unrealized_pnl": 0.0,
+        "realized_pnl": 0.0
+      }
+    },
+    "transactions": [
+      {
+        "id": "c73fe5ea-1302-400c-9e7d-df09a2d7fe55",
+        "symbol": "AAPL",
+        "transaction_type": "BUY",
+        "quantity": 100.0,
+        "price": 150.0,
+        "total_amount": 15015.0,
+        "timestamp": "2025-10-05T14:41:12.763961",
+        "fees": 15.0,
+        "notes": "Bought 100.00 shares at market price"
+      }
+    ],
+    "performance_history": [],
+    "created_at": "2025-10-05T14:41:12.763788",
+    "last_updated": "2025-10-05T14:41:12.764011",
+    "last_rebalance": null
+  },
+  "performance_metrics": {
+    "total_return": 0.0,
+    "total_return_percentage": 0.0,
+    "daily_return": 0.0,
+    "volatility": 0.0,
+    "sharpe_ratio": 0.0,
+    "max_drawdown": 0.0,
+    "win_rate": 0.0,
+    "total_trades": 1,
+    "winning_trades": 0,
+    "losing_trades": 0
+  },
+  "config": {
+    "investment_amount": 100000,
+    "risk_tolerance": "moderate",
+    "max_position_size": 0.2,
+    "min_position_size": 0.02,
+    "rebalance_threshold": 0.05,
+    "trading_fees": 0.001,
+    "auto_rebalance": true,
+    "stop_loss_percentage": 0.1,
+    "take_profit_percentage": 0.2
+  }
+}

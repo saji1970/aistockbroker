@@ -6,7 +6,11 @@ import {
   ShieldCheckIcon,
   ExclamationTriangleIcon,
   ChartBarIcon,
-  ClockIcon
+  ClockIcon,
+  Cog6ToothIcon,
+  DatabaseIcon,
+  EyeIcon,
+  SparklesIcon
 } from '@heroicons/react/24/outline';
 import toast from 'react-hot-toast';
 import adminService from '../../services/adminService';
@@ -136,19 +140,28 @@ const AdminDashboard = () => {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Header */}
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900">Admin Dashboard</h1>
-          <p className="mt-1 text-sm text-gray-600">
-            Manage users and monitor system activity
-          </p>
+      {/* Page Header */}
+      <div className="bg-white border-b border-gray-200 px-6 py-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center space-x-4">
+            <div className="flex items-center justify-center w-10 h-10 bg-red-600 rounded-lg">
+              <ShieldCheckIcon className="w-5 h-5 text-white" />
+            </div>
+            <div>
+              <h1 className="text-xl font-semibold text-gray-900">Admin Dashboard</h1>
+              <p className="text-sm text-gray-500">System management and user oversight</p>
+            </div>
+          </div>
         </div>
+      </div>
+
+      {/* Content */}
+      <div className="p-6">
 
         {/* Stats Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-6 mb-8">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4 mb-6">
           {statCards.map((stat, index) => (
-            <div key={index} className="bg-white rounded-lg shadow p-6">
+            <div key={index} className="bg-white rounded-lg border border-gray-200 p-4">
               <div className="flex items-center">
                 <div className={`p-3 rounded-md ${stat.color}`}>
                   <stat.icon className="h-6 w-6 text-white" />
@@ -215,6 +228,19 @@ const AdminDashboard = () => {
                       <p className="text-xs text-gray-500">
                         {stats?.status_breakdown?.suspended || 0} suspended accounts
                       </p>
+                    </div>
+                  </div>
+                </Link>
+
+                <Link
+                  to="/admin/ai-prompts"
+                  className="block w-full text-left px-4 py-3 bg-purple-50 hover:bg-purple-100 rounded-lg border border-purple-200 transition-colors"
+                >
+                  <div className="flex items-center">
+                    <SparklesIcon className="h-5 w-5 text-purple-600 mr-3" />
+                    <div>
+                      <p className="text-sm font-medium text-gray-900">AI Prompt Manager</p>
+                      <p className="text-xs text-gray-500">Manage AI assistant training prompts</p>
                     </div>
                   </div>
                 </Link>

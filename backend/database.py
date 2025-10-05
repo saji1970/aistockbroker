@@ -136,9 +136,13 @@ def get_db():
     finally:
         db.close()
 
-def init_database():
+def init_database(force_recreate=False):
     """Initialize database - create tables"""
     try:
+        if force_recreate:
+            # Drop and recreate all tables (for production with ephemeral storage)
+            logger.info("Force recreating database tables...")
+            db_manager.drop_tables()
         db_manager.create_tables()
         logger.info("Database initialized successfully")
     except Exception as e:

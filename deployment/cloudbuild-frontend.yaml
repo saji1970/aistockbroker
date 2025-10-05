@@ -1,6 +1,6 @@
 steps:
   - name: 'gcr.io/cloud-builders/docker'
-    args: ['build', '-f', 'deployment/Dockerfile.frontend', '-t', 'gcr.io/$PROJECT_ID/ai-stock-trading-frontend', '.']
+    args: ['build', '-f', 'frontend/Dockerfile', '-t', 'gcr.io/$PROJECT_ID/ai-stock-trading-frontend', '.']
   - name: 'gcr.io/cloud-builders/docker'
     args: ['push', 'gcr.io/$PROJECT_ID/ai-stock-trading-frontend']
   - name: 'gcr.io/cloud-builders/gcloud'

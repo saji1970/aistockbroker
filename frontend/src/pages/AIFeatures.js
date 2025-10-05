@@ -183,7 +183,7 @@ const AIFeatures = () => {
                   <div className="bg-gray-50 p-4 rounded-lg">
                     <h3 className="font-medium text-gray-900">Confidence</h3>
                     <p className="text-2xl font-bold text-green-600">
-                      {prediction?.confidence ? `${(prediction.confidence * 100).toFixed(1)}%` : 'N/A'}
+                      {prediction?.prediction?.confidence ? `${(prediction.prediction.confidence * 100).toFixed(1)}%` : 'N/A'}
                     </p>
                   </div>
                 </div>

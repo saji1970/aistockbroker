@@ -24,15 +24,21 @@ def create_admin_user(email, username, password, first_name=None, last_name=None
 
             if existing_user:
                 print(f"User already exists: {existing_user.email}")
+                # Update existing user to have both admin and agent roles
+                existing_user.role = UserRole.ADMIN
+                existing_user.roles = ['admin', 'agent']
+                session.flush()
+                print(f"Updated user roles: admin, agent")
                 return {
                     'id': existing_user.id,
                     'email': existing_user.email,
                     'username': existing_user.username,
                     'role': existing_user.role.value if existing_user.role else None,
+                    'roles': existing_user.roles,
                     'exists': True
                 }
 
-            # Create admin user
+            # Create admin user with both admin and agent roles
             admin_user = User(
                 email=email,
                 username=username,
@@ -40,6 +46,7 @@ def create_admin_user(email, username, password, first_name=None, last_name=None
                 first_name=first_name,
                 last_name=last_name,
                 role=UserRole.ADMIN,
+                roles=['admin', 'agent'],  # Both admin and agent roles
                 status=UserStatus.ACTIVE,
                 email_verified_at=datetime.now(timezone.utc)
             )

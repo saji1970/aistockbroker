@@ -21,96 +21,68 @@ logger = logging.getLogger(__name__)
 agent_bp = Blueprint('agent', __name__, url_prefix='/api/agent')
 
 def require_auth(f):
-    """Decorator to require agent authentication"""
+    """Decorator to require agent authentication using unified auth system"""
     @wraps(f)
     def decorated_function(*args, **kwargs):
-        auth_header = request.headers.get('Authorization')
-        if not auth_header:
-            return jsonify({'error': 'Authorization header required'}), 401
+        from middleware.auth_middleware import extract_token_from_request, decode_jwt_token
+        from database import db_manager
+        from models.user import User, UserRole
         
         try:
-            # Extract token from "Bearer <token>" format
-            token = auth_header.split(' ')[1] if ' ' in auth_header else auth_header
+            # Extract token from request
+            token = extract_token_from_request()
+            if not token:
+                return jsonify({'error': 'Authorization token required'}), 401
             
-            # For now, use simple token validation
-            # In production, use JWT tokens
-            agent_id = session.get('agent_id')
-            if not agent_id or agent_id not in agent_manager.agents:
-                return jsonify({'error': 'Invalid or expired token'}), 401
+            # Decode JWT token
+            payload = decode_jwt_token(token)
+            user_id = payload.get('user_id')
             
-            # Add agent to request context
-            request.agent = agent_manager.agents[agent_id]
-            return f(*args, **kwargs)
+            if not user_id:
+                return jsonify({'error': 'Invalid token'}), 401
             
+            # Get user from database
+            with db_manager.get_session() as session:
+                user = session.query(User).get(user_id)
+                if not user or not user.is_active():
+                    return jsonify({'error': 'User not found or inactive'}), 401
+                
+                # Check if user is an agent
+                if user.role != UserRole.AGENT:
+                    return jsonify({'error': 'Access denied. Agent role required.'}), 403
+                
+                # Add user to request context
+                request.user = user.to_dict()
+                return f(*args, **kwargs)
+                
         except Exception as e:
             logger.error(f"Authentication error: {e}")
             return jsonify({'error': 'Authentication failed'}), 401
     
     return decorated_function
 
-@agent_bp.route('/auth/login', methods=['POST'])
-def login():
-    """Agent login endpoint"""
-    try:
-        data = request.get_json()
-        email = data.get('email')
-        password = data.get('password')
-        
-        if not email or not password:
-            return jsonify({'error': 'Email and password required'}), 400
-        
-        # Authenticate agent
-        agent = agent_manager.authenticate_agent(email, password)
-        if not agent:
-            return jsonify({'error': 'Invalid credentials'}), 401
-        
-        # Create session
-        session['agent_id'] = agent.id
-        session['agent_email'] = agent.email
-        
-        return jsonify({
-            'success': True,
-            'agent': {
-                'id': agent.id,
-                'name': agent.name,
-                'email': agent.email,
-                'role': agent.role.value,
-                'customers_count': len(agent.customers)
-            },
-            'message': 'Login successful'
-        }), 200
-        
-    except Exception as e:
-        logger.error(f"Login error: {e}")
-        return jsonify({'error': str(e)}), 500
-
-@agent_bp.route('/auth/logout', methods=['POST'])
-def logout():
-    """Agent logout endpoint"""
-    try:
-        session.clear()
-        return jsonify({'success': True, 'message': 'Logout successful'}), 200
-    except Exception as e:
-        logger.error(f"Logout error: {e}")
-        return jsonify({'error': str(e)}), 500
+# Note: Agent authentication is now handled by the unified auth system at /api/auth/login
+# Agents should use the same login endpoint as other users, with role-based access control
 
 @agent_bp.route('/profile', methods=['GET'])
 @require_auth
 def get_profile():
     """Get agent profile"""
     try:
-        agent = request.agent
-        stats = agent_manager.get_agent_stats(agent.id)
+        user = request.user
+        
+        # Get agent stats from the agent manager
+        stats = agent_manager.get_agent_stats(user['id'])
         
         return jsonify({
             'agent': {
-                'id': agent.id,
-                'name': agent.name,
-                'email': agent.email,
-                'role': agent.role.value,
-                'created_at': agent.created_at.isoformat(),
-                'last_login': agent.last_login.isoformat() if agent.last_login else None,
-                'is_active': agent.is_active
+                'id': user['id'],
+                'name': f"{user['first_name']} {user['last_name']}".strip() or user['username'],
+                'email': user['email'],
+                'role': user['role'],
+                'created_at': user['created_at'],
+                'last_login': user['last_login'],
+                'is_active': user['status'] == 'active'
             },
             'stats': stats
         }), 200
@@ -124,8 +96,8 @@ def get_profile():
 def get_customers():
     """Get agent's customers"""
     try:
-        agent = request.agent
-        customers = agent_manager.get_agent_customers(agent.id)
+        user = request.user
+        customers = agent_manager.get_agent_customers(user['id'])
         
         customer_list = []
         for customer in customers:
@@ -157,7 +129,7 @@ def get_customers():
 def create_customer():
     """Create new customer"""
     try:
-        agent = request.agent
+        user = request.user
         data = request.get_json()
         
         # Validate required fields
@@ -178,7 +150,7 @@ def create_customer():
             email=data['email'],
             phone=data['phone'],
             tier=tier,
-            agent_id=agent.id,
+            agent_id=user['id'],
             risk_tolerance=data.get('risk_tolerance', 'medium')
         )
         
@@ -208,10 +180,10 @@ def create_customer():
 def get_customer(customer_id):
     """Get specific customer details"""
     try:
-        agent = request.agent
+        user = request.user
         
         # Check if agent has access to this customer
-        agent_customers = [c.id for c in agent_manager.get_agent_customers(agent.id)]
+        agent_customers = [c.id for c in agent_manager.get_agent_customers(user['id'])]
         if customer_id not in agent_customers:
             return jsonify({'error': 'Customer not found or access denied'}), 404
         
@@ -244,8 +216,8 @@ def get_customer(customer_id):
 def get_suggestions():
     """Get pending trade suggestions for agent's customers"""
     try:
-        agent = request.agent
-        suggestions = agent_manager.get_pending_suggestions(agent.id)
+        user = request.user
+        suggestions = agent_manager.get_pending_suggestions(user['id'])
         
         suggestion_list = []
         for suggestion in suggestions:
@@ -279,7 +251,7 @@ def get_suggestions():
 def make_decision(suggestion_id):
     """Agent makes decision on trade suggestion"""
     try:
-        agent = request.agent
+        user = request.user
         data = request.get_json()
         
         decision = data.get('decision')
@@ -289,7 +261,7 @@ def make_decision(suggestion_id):
         # Make decision
         decision_obj = agent_manager.make_agent_decision(
             suggestion_id=suggestion_id,
-            agent_id=agent.id,
+            agent_id=user['id'],
             decision=decision,
             modified_quantity=data.get('modified_quantity'),
             modified_price=data.get('modified_price'),
@@ -321,7 +293,7 @@ def make_decision(suggestion_id):
 def generate_suggestions():
     """Generate AI suggestions for a customer"""
     try:
-        agent = request.agent
+        user = request.user
         data = request.get_json()
         
         customer_id = data.get('customer_id')
@@ -385,7 +357,7 @@ def get_learning_insights():
 def update_learning_weights():
     """Update AI learning weights based on agent feedback"""
     try:
-        agent = request.agent
+        user = request.user
         data = request.get_json()
         
         # Update learning weights
@@ -406,22 +378,22 @@ def update_learning_weights():
 def get_dashboard():
     """Get agent dashboard data"""
     try:
-        agent = request.agent
+        user = request.user
         
         # Get basic stats
-        stats = agent_manager.get_agent_stats(agent.id)
+        stats = agent_manager.get_agent_stats(user['id'])
         
         # Get recent suggestions
-        recent_suggestions = agent_manager.get_pending_suggestions(agent.id)[:5]
+        recent_suggestions = agent_manager.get_pending_suggestions(user['id'])[:5]
         
         # Get learning insights
         learning_insights = agent_manager.get_learning_insights()
         
         dashboard_data = {
             'agent': {
-                'id': agent.id,
-                'name': agent.name,
-                'role': agent.role.value
+                'id': user['id'],
+                'name': f"{user['first_name']} {user['last_name']}".strip() or user['username'],
+                'role': user['role']
             },
             'stats': stats,
             'recent_suggestions': [
@@ -448,10 +420,10 @@ def get_dashboard():
 def get_customer_portfolio(customer_id):
     """Get customer portfolio data"""
     try:
-        agent = request.agent
+        user = request.user
         
         # Check if agent has access to this customer
-        agent_customers = [c.id for c in agent_manager.get_agent_customers(agent.id)]
+        agent_customers = [c.id for c in agent_manager.get_agent_customers(user['id'])]
         if customer_id not in agent_customers:
             return jsonify({'error': 'Customer not found or access denied'}), 404
         

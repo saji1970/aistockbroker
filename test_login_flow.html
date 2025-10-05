@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Login Flow</title>
+</head>
+<body>
+    <h1>Test Login Flow</h1>
+    <div id="result"></div>
+
+    <script>
+        const API_URL = 'https://ai-stock-trading-backend-simple-1012090067429.us-central1.run.app';
+        const resultDiv = document.getElementById('result');
+
+        async function testLoginFlow() {
+            try {
+                resultDiv.innerHTML += '<p>Step 1: Testing login...</p>';
+
+                const loginResponse = await fetch(`${API_URL}/api/auth/login`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        email_or_username: 'saji',
+                        password: 'sajiai123@'
+                    })
+                });
+
+                const loginData = await loginResponse.json();
+                resultDiv.innerHTML += `<p>Login Response: ${JSON.stringify(loginData, null, 2)}</p>`;
+
+                if (loginData.success && loginData.token) {
+                    resultDiv.innerHTML += '<p style="color: green">✓ Login successful!</p>';
+
+                    // Test if token works
+                    resultDiv.innerHTML += '<p>Step 2: Testing authenticated request...</p>';
+
+                    const profileResponse = await fetch(`${API_URL}/api/user/profile`, {
+                        method: 'GET',
+                        headers: {
+                            'Authorization': `Bearer ${loginData.token}`,
+                            'Content-Type': 'application/json'
+                        }
+                    });
+
+                    const profileData = await profileResponse.json();
+                    resultDiv.innerHTML += `<p>Profile Response: ${JSON.stringify(profileData, null, 2)}</p>`;
+
+                    if (profileResponse.ok) {
+                        resultDiv.innerHTML += '<p style="color: green">✓ Token works! User can access protected routes.</p>';
+                    } else {
+                        resultDiv.innerHTML += '<p style="color: red">✗ Token not working - this is why dashboard won\'t load!</p>';
+                    }
+                } else {
+                    resultDiv.innerHTML += `<p style="color: red">✗ Login failed: ${loginData.error || loginData.message}</p>`;
+                }
+
+            } catch (error) {
+                resultDiv.innerHTML += `<p style="color: red">Error: ${error.message}</p>`;
+            }
+        }
+
+        // Run test on page load
+        testLoginFlow();
+    </script>
+</body>
+</html>

@@ -118,20 +118,27 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  const login = async (emailOrUsername, password, rememberMe = false, role = null) => {
+  const login = async (emailOrUsername, password, rememberMe = false) => {
     try {
+      console.log('🔄 AuthContext: Starting login...');
+      console.log('📧 AuthContext: Email/Username:', emailOrUsername);
+      
       dispatch({ type: AUTH_ACTIONS.LOGIN_START });
 
-      const result = await authService.login(emailOrUsername, password, rememberMe, role);
+      const result = await authService.login(emailOrUsername, password, rememberMe);
+      console.log('📋 AuthContext: AuthService result:', result);
 
       if (result.success) {
+        console.log('✅ AuthContext: Login successful, dispatching success');
         dispatch({ type: AUTH_ACTIONS.LOGIN_SUCCESS, payload: result.user });
         return result;
       } else {
+        console.log('❌ AuthContext: Login failed, dispatching failure');
         dispatch({ type: AUTH_ACTIONS.LOGIN_FAILURE, payload: result.error });
         return result;
       }
     } catch (error) {
+      console.error('💥 AuthContext: Login exception:', error);
       const errorMessage = 'Login failed. Please try again.';
       dispatch({ type: AUTH_ACTIONS.LOGIN_FAILURE, payload: errorMessage });
       return { success: false, error: errorMessage };
@@ -187,8 +194,20 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+  const updateSelectedRole = (selectedRole) => {
+    if (state.user) {
+      const updatedUser = { ...state.user, selectedRole };
+      dispatch({ type: AUTH_ACTIONS.UPDATE_USER, payload: updatedUser });
+      authService.setUser(updatedUser);
+    }
+  };
+
   // Helper functions
   const isAdmin = () => {
+    // Check selected role first if user has multiple roles
+    if (state.user?.selectedRole) {
+      return state.user.selectedRole === 'admin';
+    }
     // If user has all roles or multiple roles, treat as admin
     if (state.user?.roles && Array.isArray(state.user.roles)) {
       const allRoles = ['admin', 'agent', 'user', 'customer'];
@@ -208,6 +227,10 @@ export const AuthProvider = ({ children }) => {
   };
 
   const canAccessTrading = () => {
+    // Check selected role first if user has multiple roles
+    if (state.user?.selectedRole) {
+      return isActive() && ['admin', 'agent', 'user', 'customer'].includes(state.user.selectedRole);
+    }
     // If user has all roles or is admin/user, allow trading access
     if (state.user?.roles && Array.isArray(state.user.roles)) {
       const hasAllRoles = ['admin', 'agent', 'user', 'customer'].every(role => 
@@ -219,6 +242,10 @@ export const AuthProvider = ({ children }) => {
   };
 
   const hasRole = (role) => {
+    // Check selected role first if user has multiple roles
+    if (state.user?.selectedRole) {
+      return state.user.selectedRole === role;
+    }
     if (state.user?.roles && Array.isArray(state.user.roles)) {
       return state.user.roles.includes(role);
     }
@@ -226,6 +253,10 @@ export const AuthProvider = ({ children }) => {
   };
 
   const hasAnyRole = (roles) => {
+    // Check selected role first if user has multiple roles
+    if (state.user?.selectedRole) {
+      return roles.includes(state.user.selectedRole);
+    }
     if (state.user?.roles && Array.isArray(state.user.roles)) {
       return roles.some(role => state.user.roles.includes(role));
     }
@@ -242,6 +273,7 @@ export const AuthProvider = ({ children }) => {
     logout,
     updateUser,
     refreshUser,
+    updateSelectedRole,
 
     // Helper functions
     isAdmin,

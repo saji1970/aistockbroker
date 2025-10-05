@@ -68,6 +68,11 @@ def require_auth(f: Callable) -> Callable:
     """Decorator to require authentication for a route"""
     @functools.wraps(f)
     def decorated_function(*args, **kwargs):
+        # Skip authentication for OPTIONS requests (CORS preflight)
+        if request.method == 'OPTIONS':
+            logger.info(f"OPTIONS request to {request.endpoint} - bypassing auth")
+            return '', 200
+
         user = authenticate_request()
 
         if not user:
@@ -88,6 +93,10 @@ def require_role(required_roles: List[str]) -> Callable:
     def decorator(f: Callable) -> Callable:
         @functools.wraps(f)
         def decorated_function(*args, **kwargs):
+            # Skip authentication for OPTIONS requests (CORS preflight)
+            if request.method == 'OPTIONS':
+                return '', 200
+
             user = authenticate_request()
 
             if not user:

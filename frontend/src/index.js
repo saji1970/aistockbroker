@@ -42,31 +42,7 @@ window.addEventListener('unhandledrejection', (event) => {
   }
 });
 
-// Add cache busting for service worker
-if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.getRegistrations().then(registrations => {
-    registrations.forEach(registration => {
-      registration.unregister();
-    });
-  });
-  
-  // Listen for force reload messages from service worker
-  navigator.serviceWorker.addEventListener('message', event => {
-    if (event.data && event.data.type === 'FORCE_RELOAD') {
-      console.log('Service worker requested force reload - FORCING RELOAD NOW');
-      // Clear all caches before reloading
-      if ('caches' in window) {
-        caches.keys().then(cacheNames => {
-          cacheNames.forEach(cacheName => {
-            caches.delete(cacheName);
-          });
-        });
-      }
-      // Force reload with cache bypass
-      window.location.reload(true);
-    }
-  });
-}
+// Service worker disabled for navigation fix
 
 // Force cache busting comment - v2
 
@@ -106,4 +82,4 @@ root.render(
 );
 
 // Force new build hash - bot status fix - cache bust
-console.log('Bot status fix deployed'); 
+// console.log('Bot status fix deployed'); 

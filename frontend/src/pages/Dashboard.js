@@ -1,5 +1,15 @@
 import React from 'react';
 import { useQuery } from 'react-query';
+import { 
+  ChartBarIcon, 
+  ArrowUpIcon, 
+  ArrowDownIcon, 
+  CurrencyDollarIcon,
+  EyeIcon,
+  ClockIcon,
+  CpuChipIcon,
+  BoltIcon
+} from '@heroicons/react/24/outline';
 import { stockAPI, predictionAPI } from '../services/api';
 import { useStore } from '../store/store';
 import MetricCard from '../components/Dashboard/MetricCard';
@@ -47,86 +57,137 @@ const Dashboard = () => {
   const latestPrice = stockData?.summary?.current_price || 0;
   const priceChange = stockData?.summary?.price_change || 0;
   const priceChangePercent = stockData?.summary?.price_change_pct || 0;
-  const confidence = prediction?.confidence || 0;
+  const confidence = prediction?.prediction?.confidence || 0;
 
   return (
-    <div className="space-y-4 sm:space-y-6">
+    <div className="min-h-screen bg-gray-50">
       {/* Page Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between space-y-2 sm:space-y-0">
-        <div>
-          <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Dashboard</h1>
-          <p className="text-sm sm:text-base text-gray-600">Welcome to your AI-powered trading platform</p>
-        </div>
-        <div className="flex flex-col sm:flex-row sm:items-center space-y-2 sm:space-y-0 sm:space-x-4">
-          <div className="flex flex-col sm:flex-row sm:items-center space-y-1 sm:space-y-0 sm:space-x-2 text-xs sm:text-sm text-gray-500">
-            <span>Current Symbol: {currentSymbol || 'Select a stock'}</span>
-            <span className="hidden sm:inline">•</span>
-            <span>Period: {currentPeriod || '1Y'}</span>
+      <div className="bg-white border-b border-gray-200 px-6 py-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center space-x-4">
+            <div className="flex items-center justify-center w-10 h-10 bg-blue-600 rounded-lg">
+              <ChartBarIcon className="w-5 h-5 text-white" />
+            </div>
+            <div>
+              <h1 className="text-xl font-semibold text-gray-900">Trading Dashboard</h1>
+              <p className="text-sm text-gray-500">AI-powered market analysis and insights</p>
+            </div>
           </div>
-          <a
-            href="/download.html"
-            className="inline-flex items-center px-3 py-2 bg-gradient-to-r from-blue-600 to-blue-700 text-white text-xs sm:text-sm font-medium rounded-lg hover:from-blue-700 hover:to-blue-800 transition-all duration-200 shadow-sm hover:shadow-md"
-          >
-            📱 Download Mobile App
-          </a>
+          <div className="flex items-center space-x-3">
+            <div className="text-sm text-gray-500">
+              {currentSymbol ? (
+                <span className="flex items-center space-x-1">
+                  <BoltIcon className="w-3 h-3" />
+                  <span>{currentSymbol} • {currentPeriod}</span>
+                </span>
+              ) : (
+                <span>Select a stock to begin</span>
+              )}
+            </div>
+            <a
+              href="/download.html"
+              className="flex items-center space-x-2 px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition-colors"
+            >
+              <span>📱</span>
+              <span>Mobile App</span>
+            </a>
+          </div>
         </div>
       </div>
 
-      {/* Main Content Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-4 gap-4 sm:gap-6">
-        {/* Stock Search and Controls */}
-        <div className="lg:col-span-1 space-y-4 sm:space-y-6">
-          <StockSearch />
-          <MarketSelector />
-          <InvestmentSettings />
-          <TradingBotWidget />
-        </div>
-
-        {/* Main Dashboard Content */}
-        <div className="lg:col-span-3 space-y-4 sm:space-y-6">
-          {/* Key Metrics - Only show if stock is selected */}
-          {currentSymbol && (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
-              <MetricCard
-                title="Current Price"
-                value={`$${latestPrice.toFixed(2)}`}
-                change={priceChange.toFixed(2)}
-                changePercent={priceChangePercent.toFixed(2)}
-                type="price"
-              />
-              <MetricCard
-                title="Market Cap"
-                value={stockInfo?.market_cap ? `$${(stockInfo.market_cap / 1e9).toFixed(1)}B` : 'N/A'}
-              />
-              <MetricCard
-                title="Volume"
-                value={stockInfo?.volume ? `${(stockInfo.volume / 1e6).toFixed(1)}M` : 'N/A'}
-              />
-              <MetricCard
-                title="AI Confidence"
-                value={`${confidence}%`}
-                type="confidence"
-                confidence={confidence}
-              />
+      {/* Main Content */}
+      <div className="p-6">
+        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+          {/* Sidebar */}
+          <div className="lg:col-span-1 space-y-6">
+            <div className="bg-white rounded-lg border border-gray-200 p-4">
+              <h3 className="text-sm font-medium text-gray-900 mb-3">Stock Search</h3>
+              <StockSearch />
             </div>
-          )}
+            
+            <div className="bg-white rounded-lg border border-gray-200 p-4">
+              <h3 className="text-sm font-medium text-gray-900 mb-3">Market Selection</h3>
+              <MarketSelector />
+            </div>
+            
+            <div className="bg-white rounded-lg border border-gray-200 p-4">
+              <h3 className="text-sm font-medium text-gray-900 mb-3">Trading Bot</h3>
+              <TradingBotWidget />
+            </div>
+          </div>
 
-          {/* Stock Chart */}
-          {currentSymbol ? (
-            <StockChart 
-              symbol={currentSymbol} 
-              period={currentPeriod} 
-              showVolume={true} 
-              showIndicators={true} 
-            />
-          ) : (
-            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 sm:p-6">
-              <h3 className="text-base sm:text-lg font-semibold text-gray-900 mb-4">Stock Performance</h3>
-              <div className="h-48 sm:h-64 bg-gray-50 rounded-lg flex items-center justify-center">
-                <p className="text-gray-500 text-sm sm:text-base">Select a stock to view performance data</p>
+          {/* Main Content */}
+          <div className="lg:col-span-3 space-y-6">
+            {/* Key Metrics */}
+            {currentSymbol && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div className="bg-white rounded-lg border border-gray-200 p-4">
+                  <div className="flex items-center space-x-2 mb-2">
+                    <CurrencyDollarIcon className="w-4 h-4 text-green-600" />
+                    <span className="text-sm font-medium text-gray-600">Current Price</span>
+                  </div>
+                  <div className="text-xl font-bold text-gray-900">${latestPrice.toFixed(2)}</div>
+                  <div className={`text-sm flex items-center mt-1 ${priceChange >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                    {priceChange >= 0 ? <ArrowUpIcon className="w-3 h-3 mr-1" /> : <ArrowDownIcon className="w-3 h-3 mr-1" />}
+                    {priceChange.toFixed(2)} ({priceChangePercent.toFixed(2)}%)
+                  </div>
+                </div>
+
+                <div className="bg-white rounded-lg border border-gray-200 p-4">
+                  <div className="flex items-center space-x-2 mb-2">
+                    <ArrowUpIcon className="w-4 h-4 text-blue-600" />
+                    <span className="text-sm font-medium text-gray-600">Market Cap</span>
+                  </div>
+                  <div className="text-xl font-bold text-gray-900">
+                    {stockInfo?.market_cap ? `$${(stockInfo.market_cap / 1e9).toFixed(1)}B` : 'N/A'}
+                  </div>
+                </div>
+
+                <div className="bg-white rounded-lg border border-gray-200 p-4">
+                  <div className="flex items-center space-x-2 mb-2">
+                    <ChartBarIcon className="w-4 h-4 text-purple-600" />
+                    <span className="text-sm font-medium text-gray-600">Volume</span>
+                  </div>
+                  <div className="text-xl font-bold text-gray-900">
+                    {stockInfo?.volume ? `${(stockInfo.volume / 1e6).toFixed(1)}M` : 'N/A'}
+                  </div>
+                </div>
+
+                <div className="bg-white rounded-lg border border-gray-200 p-4">
+                  <div className="flex items-center space-x-2 mb-2">
+                    <CpuChipIcon className="w-4 h-4 text-indigo-600" />
+                    <span className="text-sm font-medium text-gray-600">AI Confidence</span>
+                  </div>
+                  <div className="text-xl font-bold text-gray-900">{confidence}%</div>
+                  <div className="w-full bg-gray-200 rounded-full h-2 mt-2">
+                    <div 
+                      className="bg-indigo-600 h-2 rounded-full transition-all duration-300" 
+                      style={{ width: `${confidence}%` }}
+                    ></div>
+                  </div>
+                </div>
               </div>
+            )}
+
+            {/* Stock Chart */}
+            <div className="bg-white rounded-lg border border-gray-200 p-4">
+              <div className="flex items-center space-x-2 mb-4">
+                <ChartBarIcon className="w-4 h-4 text-gray-600" />
+                <h3 className="text-sm font-medium text-gray-900">Price Chart</h3>
+              </div>
+              {currentSymbol ? (
+                <StockChart 
+                  symbol={currentSymbol} 
+                  period={currentPeriod} 
+                  showVolume={true} 
+                  showIndicators={true} 
+                />
+              ) : (
+                <div className="h-64 bg-gray-50 rounded-lg flex items-center justify-center">
+                  <p className="text-gray-500 text-sm">Select a stock to view performance data</p>
+                </div>
+              )}
             </div>
-          )}
 
           {/* Currency Swap Section */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
@@ -157,7 +218,11 @@ const Dashboard = () => {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
                   <h4 className="font-medium text-gray-900 mb-2">Prediction</h4>
-                  <p className="text-gray-700 mb-4">{prediction.prediction}</p>
+                  <p className="text-gray-700 mb-4">
+                    {typeof prediction.prediction === 'string' 
+                      ? prediction.prediction 
+                      : JSON.stringify(prediction.prediction, null, 2)}
+                  </p>
                   
                   <div className="space-y-3">
                     <div className="flex items-center justify-between">
@@ -190,12 +255,12 @@ const Dashboard = () => {
                     
                     <div className="flex items-center justify-between">
                       <span className="text-sm text-gray-600">Target Price:</span>
-                      <span className="text-sm font-medium">${prediction.target_price?.toFixed(2) || 'N/A'}</span>
+                      <span className="text-sm font-medium">${prediction?.prediction?.target_price?.toFixed(2) || 'N/A'}</span>
                     </div>
                     
                     <div className="flex items-center justify-between">
                       <span className="text-sm text-gray-600">Stop Loss:</span>
-                      <span className="text-sm font-medium">${prediction.stop_loss?.toFixed(2) || 'N/A'}</span>
+                      <span className="text-sm font-medium">${prediction?.prediction?.stop_loss?.toFixed(2) || 'N/A'}</span>
                     </div>
                   </div>
                 </div>
@@ -205,22 +270,22 @@ const Dashboard = () => {
                   <div className="space-y-2">
                     <div className="flex items-center justify-between">
                       <span className="text-sm text-gray-600">RSI:</span>
-                      <span className="text-sm font-medium">{prediction.technical_indicators?.rsi?.toFixed(1) || 'N/A'}</span>
+                      <span className="text-sm font-medium">{prediction?.prediction?.technical_indicators?.rsi?.toFixed(1) || 'N/A'}</span>
                     </div>
                     <div className="flex items-center justify-between">
                       <span className="text-sm text-gray-600">SMA (20):</span>
-                      <span className="text-sm font-medium">${prediction.technical_indicators?.sma_20?.toFixed(2) || 'N/A'}</span>
+                      <span className="text-sm font-medium">${prediction?.prediction?.technical_indicators?.sma_20?.toFixed(2) || 'N/A'}</span>
                     </div>
                     <div className="flex items-center justify-between">
                       <span className="text-sm text-gray-600">Volatility:</span>
-                      <span className="text-sm font-medium">{(prediction.technical_indicators?.volatility * 100)?.toFixed(1) || 'N/A'}%</span>
+                      <span className="text-sm font-medium">{(prediction?.prediction?.technical_indicators?.volatility * 100)?.toFixed(1) || 'N/A'}%</span>
                     </div>
                     <div className="flex items-center justify-between">
                       <span className="text-sm text-gray-600">Price Change:</span>
                       <span className={`text-sm font-medium ${
-                        (prediction.technical_indicators?.price_change_pct || 0) >= 0 ? 'text-green-600' : 'text-red-600'
+                        (prediction?.prediction?.technical_indicators?.price_change_pct || 0) >= 0 ? 'text-green-600' : 'text-red-600'
                       }`}>
-                        {(prediction.technical_indicators?.price_change_pct || 0).toFixed(2)}%
+                        {(prediction?.prediction?.technical_indicators?.price_change_pct || 0).toFixed(2)}%
                       </span>
                     </div>
                   </div>
@@ -298,7 +363,11 @@ const Dashboard = () => {
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
           <h3 className="text-lg font-semibold text-gray-900 mb-4">AI Insights for {currentSymbol}</h3>
           <div className="prose prose-sm max-w-none">
-            <p>{prediction.prediction}</p>
+            <p>
+              {typeof prediction.prediction === 'string' 
+                ? prediction.prediction 
+                : JSON.stringify(prediction.prediction, null, 2)}
+            </p>
             <div className="mt-4 p-4 bg-blue-50 rounded-lg">
               <h4 className="font-medium text-blue-900 mb-2">Confidence Analysis</h4>
               <p className="text-blue-800">
@@ -311,6 +380,7 @@ const Dashboard = () => {
           </div>
         </div>
       )}
+      </div>
     </div>
   );
 };

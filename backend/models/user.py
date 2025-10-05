@@ -4,7 +4,7 @@ User Management Models for AI Stock Trading Platform
 Defines database models for users, roles, sessions, and audit logs
 """
 
-from sqlalchemy import Column, Integer, String, DateTime, Boolean, Text, ForeignKey, Enum, Float
+from sqlalchemy import Column, Integer, String, DateTime, Boolean, Text, ForeignKey, Enum, Float, JSON
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship
 from datetime import datetime, timedelta
@@ -49,6 +49,7 @@ class User(Base):
     first_name = Column(String(100), nullable=True)
     last_name = Column(String(100), nullable=True)
     role = Column(Enum(UserRole), default=UserRole.USER, nullable=False)
+    roles = Column(JSON, nullable=True)  # Array of roles for users with multiple roles
     status = Column(Enum(UserStatus), default=UserStatus.PENDING, nullable=False)
 
     # Profile preferences
@@ -99,8 +100,8 @@ class User(Base):
         return bcrypt.checkpw(password.encode('utf-8'), self.password_hash.encode('utf-8'))
 
     def is_admin(self):
-        """Check if the user has admin role"""
-        return self.role == UserRole.ADMIN
+        """Check if the user has admin role or all roles"""
+        return self.role == UserRole.ADMIN or self.has_all_roles() or self.has_multiple_roles()
 
     def is_active(self):
         """Check if the user account is active"""
@@ -118,6 +119,17 @@ class User(Base):
         """Check if the user is a customer"""
         return self.role == UserRole.CUSTOMER
 
+    def has_all_roles(self):
+        """Check if the user has all roles (admin, agent, user, customer)"""
+        if not self.roles:
+            return False
+        all_roles = [UserRole.ADMIN.value, UserRole.AGENT.value, UserRole.USER.value, UserRole.CUSTOMER.value]
+        return all(role in self.roles for role in all_roles)
+
+    def has_multiple_roles(self):
+        """Check if the user has multiple roles"""
+        return self.roles and len(self.roles) > 1
+
     def to_dict(self, include_sensitive=False):
         """Convert user to dictionary for JSON serialization"""
         data = {
@@ -127,6 +139,7 @@ class User(Base):
             'first_name': self.first_name,
             'last_name': self.last_name,
             'role': self.role.value,
+            'roles': self.roles if self.roles else [self.role.value],
             'status': self.status.value,
             'trading_experience': self.trading_experience,
             'risk_tolerance': self.risk_tolerance,

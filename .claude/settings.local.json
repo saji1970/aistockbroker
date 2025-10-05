@@ -6,7 +6,18 @@
       "Bash(npm start)",
       "Bash(timeout:*)",
       "Bash(taskkill:*)",
-      "Bash(pip install:*)"
+      "Bash(pip install:*)",
+      "Bash(find:*)",
+      "Bash(gcloud builds submit:*)",
+      "Bash(gcloud config get-value:*)",
+      "Read(//c/AIstockbroker/**)",
+      "Bash(docker build:*)",
+      "Bash(docker push:*)",
+      "Bash(gcloud run deploy:*)",
+      "Bash(gcloud run services describe:*)",
+      "Bash(gcloud run services list:*)",
+      "Bash(gcloud run services logs read:*)",
+      "Bash(start test_login_flow.html)"
     ],
     "deny": [],
     "ask": []

@@ -3,7 +3,7 @@ import {
   UserGroupIcon,
   ChartBarIcon,
   CurrencyDollarIcon,
-  TrendingUpIcon,
+  ArrowUpIcon,
   PlusIcon,
   EyeIcon,
   CogIcon,
@@ -13,7 +13,9 @@ import {
   TrashIcon,
   LightBulbIcon,
   FunnelIcon,
-  XMarkIcon
+  XMarkIcon,
+  UserIcon,
+  BuildingOfficeIcon
 } from '@heroicons/react/24/outline';
 import { useNavigate } from 'react-router-dom';
 
@@ -592,35 +594,46 @@ const AgentDashboard = () => {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Header */}
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900">Agent Dashboard</h1>
-          <p className="mt-2 text-gray-600">Manage your customers and trading suggestions</p>
+      {/* Page Header */}
+      <div className="bg-white border-b border-gray-200 px-6 py-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center space-x-4">
+            <div className="flex items-center justify-center w-10 h-10 bg-indigo-600 rounded-lg">
+              <UserGroupIcon className="w-5 h-5 text-white" />
+            </div>
+            <div>
+              <h1 className="text-xl font-semibold text-gray-900">Agent Dashboard</h1>
+              <p className="text-sm text-gray-500">Customer management and trading support</p>
+            </div>
+          </div>
         </div>
+      </div>
 
-        {/* Tabs */}
-        <div className="border-b border-gray-200 mb-8">
-          <nav className="-mb-px flex space-x-8">
-            {tabs.map((tab) => (
+      {/* Tabs */}
+      <div className="bg-white border-b border-gray-200 px-6">
+        <nav className="flex space-x-8">
+          {tabs.map((tab) => {
+            const Icon = tab.icon;
+            return (
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
-                className={`group inline-flex items-center py-2 px-1 border-b-2 font-medium text-sm ${
+                className={`${
                   activeTab === tab.id
-                    ? 'border-indigo-500 text-indigo-600'
+                    ? 'border-blue-500 text-blue-600'
                     : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                }`}
+                } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm flex items-center space-x-2`}
               >
-                <tab.icon className={`-ml-0.5 mr-2 h-5 w-5 ${
-                  activeTab === tab.id ? 'text-indigo-500' : 'text-gray-400 group-hover:text-gray-500'
-                }`} />
-                {tab.name}
+                <Icon className="w-4 h-4" />
+                <span>{tab.name}</span>
               </button>
-            ))}
-          </nav>
-        </div>
+            );
+          })}
+        </nav>
+      </div>
 
+      {/* Content */}
+      <div className="p-6">
         {/* Tab Content */}
         {activeTab === 'overview' && renderOverview()}
         {activeTab === 'customers' && renderCustomers()}

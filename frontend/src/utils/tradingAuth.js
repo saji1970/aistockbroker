@@ -138,18 +138,36 @@ export const fetchWithTradingAccess = async (url, options = {}) => {
     ...options.headers,
   };
   
+  // Add JWT token for authentication
+  const jwtToken = localStorage.getItem('auth_token');
+  console.log('🔑 TradingAuth: JWT token available:', !!jwtToken);
+  console.log('🔑 TradingAuth: Token length:', jwtToken ? jwtToken.length : 0);
+  
+  if (jwtToken) {
+    headers['Authorization'] = `Bearer ${jwtToken}`;
+    console.log('✅ TradingAuth: Added Authorization header');
+  } else {
+    console.warn('⚠️ TradingAuth: No JWT token found in localStorage');
+  }
+  
   if (token) {
     headers['X-Access-Token'] = token;
   }
+  
+  console.log('📡 TradingAuth: Making request to:', url);
+  console.log('📋 TradingAuth: Headers:', Object.keys(headers));
   
   const response = await fetch(url, {
     ...options,
     headers,
   });
   
+  console.log('📥 TradingAuth: Response status:', response.status);
+  
   if (!response.ok) {
     const error = new Error(`HTTP ${response.status}: ${response.statusText}`);
     error.response = response;
+    console.error('❌ TradingAuth: Request failed:', response.status, response.statusText);
     throw error;
   }
   

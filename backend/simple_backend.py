@@ -46,40 +46,89 @@ def login():
         # Handle both 'username' and 'email_or_username' fields
         username = data.get('username') or data.get('email_or_username', '') if data else ''
         password = data.get('password', '') if data else ''
-        requested_role = data.get('role', '') if data else ''
 
-        logger.info(f"Extracted - username: {username}, role: {requested_role}")
+        logger.info(f"Extracted - username: {username}")
         
         # Simple demo authentication with role-based responses
         if username and password:
-            # Special case: ranjit user is always agent
-            if username.lower() == 'ranjit':
-                user_role = 'agent'
-            # Use requested role if provided, otherwise assign based on username
-            elif requested_role and requested_role in ['admin', 'agent', 'customer']:
-                user_role = requested_role
+            # Demo user database with roles and passwords
+            user_database = {
+                'ranjit': {
+                    'roles': ['agent'],
+                    'name': 'Ranjit Kumar',
+                    'email': 'ranjit@example.com',
+                    'password': 'password'
+                },
+                'admin': {
+                    'roles': ['admin'],
+                    'name': 'Administrator',
+                    'email': 'admin@example.com',
+                    'password': 'password'
+                },
+                'john': {
+                    'roles': ['customer'],
+                    'name': 'John Smith',
+                    'email': 'john@example.com',
+                    'password': 'password'
+                },
+                'sarah': {
+                    'roles': ['agent', 'customer'],
+                    'name': 'Sarah Wilson',
+                    'email': 'sarah@example.com',
+                    'password': 'password'
+                },
+                'mike': {
+                    'roles': ['admin', 'agent'],
+                    'name': 'Mike Johnson',
+                    'email': 'mike@example.com',
+                    'password': 'password'
+                },
+                'saji': {
+                    'roles': ['admin', 'agent'],
+                    'name': 'Saji Kumar',
+                    'email': 'saji@example.com',
+                    'password': 'password'
+                }
+            }
+            
+            # Get user data from database
+            user_data = user_database.get(username.lower())
+            if user_data:
+                # Check password
+                if user_data['password'] != password:
+                    return jsonify({
+                        'success': False,
+                        'message': 'Invalid credentials'
+                    }), 401
+                
+                user_roles = user_data['roles']
+                has_multiple_roles = len(user_roles) > 1
+                # For users with multiple roles, don't set a primary role
+                # Let them choose in the frontend
+                primary_role = user_roles[0] if not has_multiple_roles else None
             else:
-                # Demo role assignment based on username
-                user_role = 'customer'  # Default role
-                if username.lower() in ['admin', 'administrator']:
-                    user_role = 'admin'
-                elif username.lower() in ['agent', 'broker', 'advisor']:
-                    user_role = 'agent'
-                elif username.lower() in ['user', 'customer', 'client']:
-                    user_role = 'customer'
+                # User not found - return 401
+                return jsonify({
+                    'success': False,
+                    'message': 'Invalid credentials'
+                }), 401
             
             return jsonify({
                 'success': True,
                 'token': 'demo_token_123',
                 'refresh_token': 'demo_refresh_token_456',
                 'user': {
-                    'id': f'demo_{user_role}',
+                    'id': f'demo_{username}',
                     'username': username,
-                    'role': user_role,
+                    'name': user_data['name'],
+                    'email': user_data['email'],
+                    'roles': user_roles,
+                    'primary_role': primary_role,
+                    'has_multiple_roles': has_multiple_roles,
                     'status': 'active'
                 },
                 'expires_at': '2025-12-31T23:59:59Z',
-                'message': f'Login successful as {user_role}'
+                'message': f'Login successful as {user_data["name"]}'
             })
         else:
             return jsonify({
@@ -159,16 +208,28 @@ def refresh_token():
         }), 500
 
 @app.route('/api/stock/data', methods=['GET'])
-def get_stock_data():
+@app.route('/api/stock/data/<symbol>', methods=['GET'])
+def get_stock_data(symbol=None):
     """Get stock data"""
     try:
-        symbol = request.args.get('symbol', 'AAPL')
+        # Get symbol from URL parameter or query parameter
+        symbol = symbol or request.args.get('symbol', 'AAPL')
+        period = request.args.get('period', '1y')
+        market = request.args.get('market', 'US')
+        
         return jsonify({
             'symbol': symbol,
             'price': 150.25,
             'change': 2.15,
             'change_percent': 1.45,
             'volume': 1000000,
+            'period': period,
+            'market': market,
+            'data': {
+                'prices': [148.10, 149.25, 150.25, 151.50, 150.75],
+                'dates': ['2024-09-30', '2024-10-01', '2024-10-02', '2024-10-03', '2024-10-04'],
+                'volume': [950000, 1100000, 1000000, 1050000, 980000]
+            },
             'message': 'Demo data - configure real API for live data'
         })
     except Exception as e:
@@ -224,23 +285,6 @@ def get_stock_info(symbol):
         logger.error(f"Stock info error: {e}")
         return jsonify({'error': str(e)}), 500
 
-@app.route('/api/prediction', methods=['GET'])
-def get_prediction():
-    """Get AI prediction"""
-    try:
-        symbol = request.args.get('symbol', 'AAPL')
-        return jsonify({
-            'symbol': symbol,
-            'prediction': 'Bullish trend expected based on technical analysis',
-            'confidence': 85,
-            'target_price': 155.50,
-            'sentiment': 'Bullish',
-            'demo_mode': True,
-            'message': 'Demo prediction - configure AI service for real predictions'
-        })
-    except Exception as e:
-        logger.error(f"Prediction error: {e}")
-        return jsonify({'error': str(e)}), 500
 
 @app.route('/api/chat/query', methods=['POST', 'OPTIONS'])
 def chat_query():
@@ -317,6 +361,390 @@ def detect_intent(query):
         return 'market_analysis'
     else:
         return 'general_inquiry'
+
+@app.route('/api/portfolio', methods=['GET', 'POST', 'OPTIONS'])
+def portfolio():
+    """Get or create portfolio"""
+    if request.method == 'OPTIONS':
+        return jsonify({'status': 'ok'}), 200
+    
+    try:
+        if request.method == 'GET':
+            # Return demo portfolio data
+            return jsonify({
+                'portfolio': {
+                    'id': 'demo_portfolio',
+                    'balance': 10000.00,
+                    'stocks': [
+                        {'symbol': 'AAPL', 'shares': 10, 'avg_price': 150.00},
+                        {'symbol': 'MSFT', 'shares': 5, 'avg_price': 300.00}
+                    ],
+                    'total_value': 15000.00,
+                    'daily_change': 250.50,
+                    'daily_change_percent': 1.69
+                },
+                'message': 'Demo portfolio data'
+            })
+        else:
+            # POST - create portfolio
+            return jsonify({
+                'success': True,
+                'portfolio_id': 'demo_portfolio_new',
+                'message': 'Portfolio created successfully'
+            })
+    except Exception as e:
+        logger.error(f"Portfolio error: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/portfolio/history', methods=['GET', 'OPTIONS'])
+def portfolio_history():
+    """Get portfolio history"""
+    if request.method == 'OPTIONS':
+        return jsonify({'status': 'ok'}), 200
+    
+    try:
+        # Return demo portfolio history
+        return jsonify({
+            'history': [
+                {'date': '2024-09-30', 'value': 14800.00, 'change': -150.00},
+                {'date': '2024-09-29', 'value': 14950.00, 'change': 100.00},
+                {'date': '2024-09-28', 'value': 14850.00, 'change': -50.00}
+            ],
+            'message': 'Demo portfolio history'
+        })
+    except Exception as e:
+        logger.error(f"Portfolio history error: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/trading/auth', methods=['POST', 'OPTIONS'])
+def trading_auth():
+    """Trading authentication endpoint"""
+    if request.method == 'OPTIONS':
+        return jsonify({'status': 'ok'}), 200
+    
+    try:
+        # Return demo trading auth token
+        return jsonify({
+            'success': True,
+            'access_token': 'demo_trading_token_123',
+            'token_type': 'Bearer',
+            'expires_in': 3600,
+            'message': 'Trading authentication successful'
+        })
+    except Exception as e:
+        logger.error(f"Trading auth error: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/trading/bot/status', methods=['GET', 'OPTIONS'])
+def trading_bot_status():
+    """Get trading bot status"""
+    if request.method == 'OPTIONS':
+        return jsonify({'status': 'ok'}), 200
+    
+    try:
+        return jsonify({
+            'status': 'active',
+            'bot_id': 'demo_bot',
+            'is_running': True,
+            'last_update': '2024-09-30T09:15:00Z',
+            'message': 'Demo bot status'
+        })
+    except Exception as e:
+        logger.error(f"Trading bot status error: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/trading/bot/start', methods=['POST', 'OPTIONS'])
+def trading_bot_start():
+    """Start trading bot"""
+    if request.method == 'OPTIONS':
+        return jsonify({'status': 'ok'}), 200
+    
+    try:
+        return jsonify({
+            'success': True,
+            'message': 'Trading bot started successfully',
+            'bot_id': 'demo_bot'
+        })
+    except Exception as e:
+        logger.error(f"Trading bot start error: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/trading/bot/stop', methods=['POST', 'OPTIONS'])
+def trading_bot_stop():
+    """Stop trading bot"""
+    if request.method == 'OPTIONS':
+        return jsonify({'status': 'ok'}), 200
+    
+    try:
+        return jsonify({
+            'success': True,
+            'message': 'Trading bot stopped successfully',
+            'bot_id': 'demo_bot'
+        })
+    except Exception as e:
+        logger.error(f"Trading bot stop error: {e}")
+        return jsonify({'error': str(e)}), 500
+
+# Additional trading bot endpoints
+@app.route('/api/status', methods=['GET', 'OPTIONS'])
+def get_bot_status():
+    """Get trading bot status"""
+    if request.method == 'OPTIONS':
+        return jsonify({'status': 'ok'}), 200
+    
+    try:
+        return jsonify({
+            'status': 'active',
+            'bot_id': 'demo_bot',
+            'is_running': True,
+            'last_update': '2024-09-30T09:15:00Z',
+            'message': 'Demo bot status'
+        })
+    except Exception as e:
+        logger.error(f"Bot status error: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/performance', methods=['GET', 'OPTIONS'])
+def get_performance():
+    """Get trading bot performance"""
+    if request.method == 'OPTIONS':
+        return jsonify({'status': 'ok'}), 200
+    
+    try:
+        return jsonify({
+            'performance': {
+                'total_return': 15.6,
+                'daily_return': 0.8,
+                'weekly_return': 3.2,
+                'monthly_return': 8.9,
+                'sharpe_ratio': 1.8,
+                'max_drawdown': -2.1,
+                'win_rate': 68.5,
+                'total_trades': 145,
+                'profitable_trades': 99
+            },
+            'message': 'Demo performance data'
+        })
+    except Exception as e:
+        logger.error(f"Performance error: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/orders', methods=['GET', 'OPTIONS'])
+def get_orders():
+    """Get trading orders"""
+    if request.method == 'OPTIONS':
+        return jsonify({'status': 'ok'}), 200
+    
+    try:
+        return jsonify({
+            'orders': [
+                {
+                    'id': 'order_001',
+                    'symbol': 'AAPL',
+                    'side': 'buy',
+                    'quantity': 10,
+                    'price': 150.25,
+                    'status': 'filled',
+                    'timestamp': '2024-09-30T09:10:00Z'
+                },
+                {
+                    'id': 'order_002',
+                    'symbol': 'MSFT',
+                    'side': 'sell',
+                    'quantity': 5,
+                    'price': 305.80,
+                    'status': 'pending',
+                    'timestamp': '2024-09-30T09:15:00Z'
+                }
+            ],
+            'message': 'Demo orders data'
+        })
+    except Exception as e:
+        logger.error(f"Orders error: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/watchlist', methods=['GET', 'OPTIONS'])
+def get_watchlist():
+    """Get watchlist"""
+    if request.method == 'OPTIONS':
+        return jsonify({'status': 'ok'}), 200
+    
+    try:
+        return jsonify({
+            'watchlist': [
+                {'symbol': 'AAPL', 'name': 'Apple Inc.', 'price': 150.25, 'change': 2.15},
+                {'symbol': 'MSFT', 'name': 'Microsoft Corp.', 'price': 305.80, 'change': -1.20},
+                {'symbol': 'GOOGL', 'name': 'Alphabet Inc.', 'price': 125.40, 'change': 0.85},
+                {'symbol': 'TSLA', 'name': 'Tesla Inc.', 'price': 245.60, 'change': -3.20}
+            ],
+            'message': 'Demo watchlist data'
+        })
+    except Exception as e:
+        logger.error(f"Watchlist error: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/strategies', methods=['GET', 'OPTIONS'])
+def get_strategies():
+    """Get trading strategies"""
+    if request.method == 'OPTIONS':
+        return jsonify({'status': 'ok'}), 200
+    
+    try:
+        return jsonify({
+            'strategies': [
+                {
+                    'id': 'strategy_001',
+                    'name': 'Momentum Trading',
+                    'description': 'Buy on upward momentum, sell on downward momentum',
+                    'active': True,
+                    'performance': 12.5
+                },
+                {
+                    'id': 'strategy_002',
+                    'name': 'Mean Reversion',
+                    'description': 'Buy oversold stocks, sell overbought stocks',
+                    'active': False,
+                    'performance': 8.3
+                }
+            ],
+            'message': 'Demo strategies data'
+        })
+    except Exception as e:
+        logger.error(f"Strategies error: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/prediction/<symbol>', methods=['GET', 'OPTIONS'])
+def get_prediction(symbol):
+    """Get stock prediction"""
+    if request.method == 'OPTIONS':
+        return jsonify({'status': 'ok'}), 200
+    
+    try:
+        return jsonify({
+            'symbol': symbol,
+            'prediction': {
+                'direction': 'bullish',
+                'confidence': 75.5,
+                'target_price': 165.50,
+                'timeframe': '1 week',
+                'reasoning': 'Strong technical indicators and positive market sentiment',
+                'stop_loss': 150.00,
+                'technical_indicators': {
+                    'rsi': 65.2,
+                    'sma_20': 158.75,
+                    'volatility': 0.18,
+                    'price_change_pct': 2.35
+                }
+            },
+            'message': 'Demo prediction data'
+        })
+    except Exception as e:
+        logger.error(f"Prediction error: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/prediction/<symbol>/sensitivity', methods=['GET', 'OPTIONS'])
+def get_prediction_sensitivity(symbol):
+    """Get prediction sensitivity analysis"""
+    if request.method == 'OPTIONS':
+        return jsonify({'status': 'ok'}), 200
+    
+    try:
+        return jsonify({
+            'symbol': symbol,
+            'sensitivity': {
+                'market_volatility': 0.65,
+                'earnings_impact': 0.80,
+                'sector_performance': 0.45,
+                'news_sentiment': 0.70
+            },
+            'message': 'Demo sensitivity data'
+        })
+    except Exception as e:
+        logger.error(f"Sensitivity error: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/marketmate/query', methods=['GET', 'OPTIONS'])
+def marketmate_query():
+    """MarketMate API - Natural Language Market Queries"""
+    if request.method == 'OPTIONS':
+        return jsonify({'status': 'ok'}), 200
+    
+    try:
+        query = request.args.get('q', '')
+        logger.info(f"MarketMate query: {query}")
+        
+        # Simple query processing for demo
+        query_lower = query.lower()
+        
+        # Stock price queries
+        if any(word in query_lower for word in ['price', 'cost', 'value', 'how much']):
+            # Extract symbol from query
+            symbols = ['AAPL', 'MSFT', 'GOOGL', 'TSLA', 'META', 'NVDA', 'AMZN', 'NFLX']
+            symbol = None
+            for s in symbols:
+                if s.lower() in query_lower:
+                    symbol = s
+                    break
+            
+            if symbol:
+                return jsonify({
+                    'query': query,
+                    'type': 'stock_price',
+                    'symbol': symbol,
+                    'price': 150.25,
+                    'change': 2.15,
+                    'change_percent': 1.45,
+                    'message': f"{symbol} is currently trading at $150.25, up 1.45%"
+                })
+            else:
+                return jsonify({
+                    'query': query,
+                    'type': 'general',
+                    'message': 'I can help you with stock price information. Try asking about AAPL, MSFT, GOOGL, TSLA, META, or NVDA.'
+                })
+        
+        # Prediction queries
+        elif any(word in query_lower for word in ['predict', 'forecast', 'direction', 'tomorrow', 'next week']):
+            return jsonify({
+                'query': query,
+                'type': 'prediction',
+                'message': 'I can provide stock predictions. Please specify a stock symbol for more detailed analysis.',
+                'suggestions': [
+                    'Predict AAPL direction for tomorrow',
+                    'What is the forecast for MSFT next week?',
+                    'Analyze TSLA price direction'
+                ]
+            })
+        
+        # General market queries
+        elif any(word in query_lower for word in ['market', 'overview', 'trend', 'analysis']):
+            return jsonify({
+                'query': query,
+                'type': 'market_analysis',
+                'message': 'Market analysis shows mixed signals with technology stocks leading gains.',
+                'insights': [
+                    'Technology sector up 2.3%',
+                    'Healthcare sector down 0.5%',
+                    'Overall market sentiment: Bullish'
+                ]
+            })
+        
+        # Default response
+        else:
+            return jsonify({
+                'query': query,
+                'type': 'general',
+                'message': 'I can help you with stock prices, predictions, and market analysis. Try asking about specific stocks or market trends.',
+                'examples': [
+                    'What is the price of AAPL?',
+                    'Predict MSFT direction for tomorrow',
+                    'Market overview for today'
+                ]
+            })
+            
+    except Exception as e:
+        logger.error(f"MarketMate error: {e}")
+        return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 8080))

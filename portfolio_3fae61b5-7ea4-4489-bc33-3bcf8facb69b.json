@@ -1,0 +1,85 @@
+{
+  "portfolio": {
+    "id": "3fae61b5-7ea4-4489-bc33-3bcf8facb69b",
+    "name": "test_portfolio",
+    "config": {
+      "investment_amount": 100000,
+      "risk_tolerance": "moderate",
+      "max_position_size": 0.2,
+      "min_position_size": 0.02,
+      "rebalance_threshold": 0.05,
+      "trading_fees": 0.001,
+      "auto_rebalance": true,
+      "stop_loss_percentage": 0.1,
+      "take_profit_percentage": 0.2
+    },
+    "total_capital": 100000,
+    "available_cash": 68969.0,
+    "total_value": 98969.0,
+    "assets": {
+      "AAPL": {
+        "symbol": "AAPL",
+        "name": "AAPL",
+        "asset_type": "STOCK",
+        "current_price": 150.0,
+        "quantity": 200.0,
+        "avg_cost": 155.0,
+        "target_allocation": 0.0,
+        "market_value": 15000.0,
+        "unrealized_pnl": 0.0,
+        "realized_pnl": 0.0
+      }
+    },
+    "transactions": [
+      {
+        "id": "0811864a-f8c4-4b93-a3e9-fc893981e888",
+        "symbol": "AAPL",
+        "transaction_type": "BUY",
+        "quantity": 100.0,
+        "price": 150.0,
+        "total_amount": 15015.0,
+        "timestamp": "2025-10-05T14:41:12.766276",
+        "fees": 15.0,
+        "notes": "Bought 100.00 shares at market price"
+      },
+      {
+        "id": "81ecb12d-48a9-4af6-9896-aaafd7191e2b",
+        "symbol": "AAPL",
+        "transaction_type": "BUY",
+        "quantity": 100.0,
+        "price": 160.0,
+        "total_amount": 16016.0,
+        "timestamp": "2025-10-05T14:41:12.767333",
+        "fees": 16.0,
+        "notes": "Bought 100.00 shares at market price"
+      }
+    ],
+    "performance_history": [],
+    "created_at": "2025-10-05T14:41:12.766034",
+    "last_updated": "2025-10-05T14:41:12.767377",
+    "last_rebalance": null
+  },
+  "performance_metrics": {
+    "total_return": 0.0,
+    "total_return_percentage": 0.0,
+    "daily_return": 0.0,
+    "volatility": 0.0,
+    "sharpe_ratio": 0.0,
+    "max_drawdown": 0.0,
+    "win_rate": 0.0,
+    "total_trades": 2,
+    "winning_trades": 0,
+    "losing_trades": 0
+  },
+  "config": {
+    "investment_amount": 100000,
+    "risk_tolerance": "moderate",
+    "max_position_size": 0.2,
+    "min_position_size": 0.02,
+    "rebalance_threshold": 0.05,
+    "trading_fees": 0.001,
+    "auto_rebalance": true,
+    "stop_loss_percentage": 0.1,
+    "take_profit_percentage": 0.2
+  }
+}

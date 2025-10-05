@@ -314,7 +314,7 @@ def refresh_token():
                 }), 401
 
             # Refresh session
-            user_session.refresh()
+            user_session.refresh(session_duration_hours=24)
 
             # Generate new JWT token
             new_token = auth_service._generate_jwt_token(user.id, user_session.session_token)

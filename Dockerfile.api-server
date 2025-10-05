@@ -15,23 +15,22 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy the backend directory and related files
 COPY backend/ ./
-COPY config/ ./config/
 
 # Create logs directory
 RUN mkdir -p /app/logs
 
 # Expose port
-EXPOSE 5001
+EXPOSE 8080
 
 # Set environment variables
 ENV FLASK_APP=api_server.py
 ENV FLASK_ENV=production
 ENV PYTHONPATH=/app
-ENV PORT=5001
+ENV PORT=8080
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost:5001/api/health || exit 1
+    CMD curl -f http://localhost:8080/api/health || exit 1
 
 # Run the API server
 CMD ["python", "api_server.py"]

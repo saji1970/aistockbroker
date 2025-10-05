@@ -1,37 +1,30 @@
-# Build stage
-FROM node:18-alpine as build
-
-WORKDIR /app
-
-# Copy package files
-COPY package*.json ./
-
-# Install dependencies
-RUN npm ci
-
-# Copy source code
-COPY . .
-
-# Build the app
-RUN npm run build
-
-# Production stage
+# Use the official Node.js runtime as the base image
 FROM node:18-alpine
 
+# Set the working directory in the container
 WORKDIR /app
 
-# Copy package files
-COPY package*.json ./
+# Copy package.json and package-lock.json
+COPY frontend/package*.json ./
 
-# Install only production dependencies
-RUN npm ci --only=production && npm cache clean --force
+# Install all dependencies (including dev dependencies for build)
+RUN npm install
 
-# Copy built app and server files
-COPY --from=build /app/build ./build
-COPY server.js ./
+# Copy source code
+COPY frontend/src ./src
+COPY frontend/public ./public
 
-# Expose port
+# Build the React app
+RUN npm run build
+
+# Copy the server file
+COPY frontend/serve.js ./
+
+# Expose the port the app runs on
 EXPOSE 8080
 
+# Set environment variable
+ENV REACT_APP_API_URL=https://ai-stock-trading-backend-simple-1012090067429.us-central1.run.app
+
 # Start the server
-CMD ["npm", "run", "serve"]
+CMD ["node", "serve.js"]

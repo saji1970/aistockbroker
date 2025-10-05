@@ -130,8 +130,7 @@ self.addEventListener('activate', event => {
           clients.forEach(client => {
             console.log('Sending FORCE_RELOAD to client');
             client.postMessage({ type: 'FORCE_RELOAD' });
-            // Also try to navigate the client to force a reload
-            client.navigate(client.url);
+            // Let the client handle the reload via message instead of navigation
           });
         });
       });

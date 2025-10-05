@@ -5,8 +5,8 @@ import EquityCurveChart from '../components/Charts/EquityCurveChart';
 import { toast } from 'react-hot-toast';
 import {
   ChartBarIcon,
-  ArrowTrendingUpIcon,
-  ArrowTrendingDownIcon,
+  ArrowUpIcon,
+  ArrowDownIcon,
   InformationCircleIcon,
   MagnifyingGlassIcon,
   ClockIcon,
@@ -17,6 +17,8 @@ import {
   PlayIcon,
   StopIcon,
   DocumentChartBarIcon,
+  BeakerIcon,
+  CpuChipIcon
 } from '@heroicons/react/24/outline';
 import LoadingSpinner from '../components/UI/LoadingSpinner';
 
@@ -29,7 +31,6 @@ const Backtest = () => {
   const [isRunning, setIsRunning] = useState(false);
   const [backtestResults, setBacktestResults] = useState(null);
 
-  // Predefined instruments for quick selection
   const popularInstruments = {
     stocks: [
       { symbol: 'AAPL', name: 'Apple Inc.', type: 'stock' },
@@ -48,180 +49,77 @@ const Backtest = () => {
       { symbol: 'VOO', name: 'Vanguard S&P 500 ETF', type: 'etf' },
       { symbol: 'ARKK', name: 'ARK Innovation ETF', type: 'etf' },
       { symbol: 'GLD', name: 'SPDR Gold Trust', type: 'etf' },
-      { symbol: 'BND', name: 'Vanguard Total Bond Market ETF', type: 'etf' },
-      { symbol: 'IWM', name: 'iShares Russell 2000 ETF', type: 'etf' },
     ],
     crypto: [
-      { symbol: 'BTC-USD', name: 'Bitcoin', type: 'crypto' },
-      { symbol: 'ETH-USD', name: 'Ethereum', type: 'crypto' },
-      { symbol: 'ADA-USD', name: 'Cardano', type: 'crypto' },
-      { symbol: 'DOT-USD', name: 'Polkadot', type: 'crypto' },
-      { symbol: 'LINK-USD', name: 'Chainlink', type: 'crypto' },
-      { symbol: 'UNI-USD', name: 'Uniswap', type: 'crypto' },
+      { symbol: 'BTCUSD', name: 'Bitcoin / USD', type: 'crypto' },
+      { symbol: 'ETHUSD', name: 'Ethereum / USD', type: 'crypto' },
     ],
     indices: [
-      { symbol: '^GSPC', name: 'S&P 500', type: 'index' },
-      { symbol: '^DJI', name: 'Dow Jones Industrial Average', type: 'index' },
-      { symbol: '^IXIC', name: 'NASDAQ Composite', type: 'index' },
-      { symbol: '^VIX', name: 'CBOE Volatility Index', type: 'index' },
-    ]
+      { symbol: 'SPX', name: 'S&P 500 Index', type: 'index' },
+      { symbol: 'NDX', name: 'NASDAQ 100 Index', type: 'index' },
+    ],
   };
 
   const strategies = [
-    {
-      id: 'sma_crossover',
-      name: 'SMA Crossover',
-      description: 'Buy when short SMA crosses above long SMA, sell when it crosses below',
-      icon: ArrowTrendingUpIcon,
-      parameters: [
-        { name: 'short_period', label: 'Short SMA Period', type: 'number', default: 20, min: 5, max: 50 },
-        { name: 'long_period', label: 'Long SMA Period', type: 'number', default: 50, min: 20, max: 200 }
-      ]
-    },
-    {
-      id: 'rsi_strategy',
-      name: 'RSI Strategy',
-      description: 'Buy when RSI is oversold, sell when overbought',
-      icon: ArrowTrendingDownIcon,
-      parameters: [
-        { name: 'rsi_period', label: 'RSI Period', type: 'number', default: 14, min: 5, max: 30 },
-        { name: 'oversold', label: 'Oversold Level', type: 'number', default: 30, min: 10, max: 40 },
-        { name: 'overbought', label: 'Overbought Level', type: 'number', default: 70, min: 60, max: 90 }
-      ]
-    },
-    {
-      id: 'macd_strategy',
-      name: 'MACD Strategy',
-      description: 'Buy when MACD crosses above signal line, sell when it crosses below',
-      icon: ChartBarIcon,
-      parameters: [
-        { name: 'fast_period', label: 'Fast EMA Period', type: 'number', default: 12, min: 5, max: 20 },
-        { name: 'slow_period', label: 'Slow EMA Period', type: 'number', default: 26, min: 15, max: 50 },
-        { name: 'signal_period', label: 'Signal Period', type: 'number', default: 9, min: 5, max: 20 }
-      ]
-    },
-    {
-      id: 'bollinger_bands',
-      name: 'Bollinger Bands',
-      description: 'Buy when price touches lower band, sell when it touches upper band',
-      icon: InformationCircleIcon,
-      parameters: [
-        { name: 'bb_period', label: 'BB Period', type: 'number', default: 20, min: 10, max: 50 },
-        { name: 'bb_std', label: 'Standard Deviation', type: 'number', default: 2, min: 1, max: 3, step: 0.1 }
-      ]
-    },
-    {
-      id: 'mean_reversion',
-      name: 'Mean Reversion',
-      description: 'Buy when price is below moving average, sell when above',
-      icon: ArrowTrendingUpIcon,
-      parameters: [
-        { name: 'ma_period', label: 'Moving Average Period', type: 'number', default: 50, min: 20, max: 200 },
-        { name: 'deviation', label: 'Deviation Threshold', type: 'number', default: 0.05, min: 0.01, max: 0.2, step: 0.01 }
-      ]
-    },
-    {
-      id: 'momentum',
-      name: 'Momentum Strategy',
-      description: 'Buy when momentum is positive, sell when negative',
-      icon: FireIcon,
-      parameters: [
-        { name: 'momentum_period', label: 'Momentum Period', type: 'number', default: 10, min: 5, max: 30 },
-        { name: 'threshold', label: 'Momentum Threshold', type: 'number', default: 0.02, min: 0.01, max: 0.1, step: 0.01 }
-      ]
-    }
+    { id: 'sma_crossover', name: 'SMA Crossover', description: 'Simple Moving Average Crossover Strategy' },
+    { id: 'rsi_divergence', name: 'RSI Divergence', description: 'Relative Strength Index Divergence Strategy' },
+    { id: 'macd_signal', name: 'MACD Signal', description: 'Moving Average Convergence Divergence Strategy' },
   ];
 
-  const [strategyParams, setStrategyParams] = useState({});
-
-  // Initialize strategy parameters
-  React.useEffect(() => {
-    const selectedStrategy = strategies.find(s => s.id === strategy);
-    if (selectedStrategy) {
-      const params = {};
-      selectedStrategy.parameters.forEach(param => {
-        params[param.name] = param.default;
-      });
-      setStrategyParams(params);
+  const getInstrumentTypeIcon = (type) => {
+    switch (type) {
+      case 'stock': return BuildingOfficeIcon;
+      case 'etf': return GlobeAltIcon;
+      case 'crypto': return CurrencyDollarIcon;
+      case 'index': return ChartBarIcon;
+      default: return InformationCircleIcon;
     }
-  }, [strategy]);
-
-  const handleStrategySelect = (strategyId) => {
-    setStrategy(strategyId);
-  };
-
-  const handleParamChange = (paramName, value) => {
-    setStrategyParams(prev => ({
-      ...prev,
-      [paramName]: value
-    }));
   };
 
   const handleInstrumentSelect = (instrument) => {
     setSelectedSymbol(instrument.symbol);
   };
 
-  const runBacktestMutation = useMutation(
-    (backtestConfig) => backtestAPI.runBacktest(backtestConfig),
+  const handleStrategySelect = (strategyId) => {
+    setStrategy(strategyId);
+  };
+
+  const { mutate: runBacktest, isLoading: isBacktesting } = useMutation(
+    backtestAPI.runBacktest,
     {
+      onMutate: () => {
+        setIsRunning(true);
+        setBacktestResults(null);
+        toast.loading('Running backtest...');
+      },
       onSuccess: (data) => {
+        toast.dismiss();
         setBacktestResults(data);
-        setIsRunning(false);
         toast.success('Backtest completed successfully!');
       },
       onError: (error) => {
-        setIsRunning(false);
-        toast.error('Backtest failed. Please try again.');
+        toast.dismiss();
         console.error('Backtest error:', error);
+        toast.error(`Backtest failed: ${error.message}`);
+      },
+      onSettled: () => {
+        setIsRunning(false);
       }
     }
   );
 
   const handleRunBacktest = () => {
-    if (!selectedSymbol || !startDate || !endDate || !initialCapital) {
-      toast.error('Please fill in all required fields');
-      return;
-    }
-
-    setIsRunning(true);
-    const backtestConfig = {
+    runBacktest({
       symbol: selectedSymbol,
-      start_date: startDate,
-      end_date: endDate,
-      initial_capital: parseFloat(initialCapital),
-      strategy: strategy,
-      parameters: strategyParams
-    };
-
-    runBacktestMutation.mutate(backtestConfig);
-  };
-
-  const getInstrumentTypeIcon = (type) => {
-    switch (type) {
-      case 'stock': return BuildingOfficeIcon;
-      case 'etf': return DocumentChartBarIcon;
-      case 'crypto': return GlobeAltIcon;
-      case 'index': return ChartBarIcon;
-      default: return InformationCircleIcon;
-    }
-  };
-
-  const getInstrumentTypeColor = (type) => {
-    switch (type) {
-      case 'stock': return 'text-blue-600 bg-blue-100';
-      case 'etf': return 'text-green-600 bg-green-100';
-      case 'crypto': return 'text-orange-600 bg-orange-100';
-      case 'index': return 'text-purple-600 bg-purple-100';
-      default: return 'text-gray-600 bg-gray-100';
-    }
+      startDate,
+      endDate,
+      initialCapital,
+      strategy,
+    });
   };
 
   const formatCurrency = (value) => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD',
-      minimumFractionDigits: 2
-    }).format(value);
+    return `$${value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   };
 
   const formatPercentage = (value) => {
@@ -229,184 +127,160 @@ const Backtest = () => {
   };
 
   return (
-    <div className="container mx-auto px-4 py-8">
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-900 mb-2">Backtest Trading Strategies</h1>
-        <p className="text-gray-600">
-          Test your trading strategies against historical data to evaluate performance and optimize parameters.
-        </p>
+    <div className="min-h-screen bg-gray-50">
+      {/* Page Header */}
+      <div className="bg-white border-b border-gray-200 px-6 py-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center space-x-4">
+            <div className="flex items-center justify-center w-10 h-10 bg-orange-600 rounded-lg">
+              <BeakerIcon className="w-5 h-5 text-white" />
+            </div>
+            <div>
+              <h1 className="text-xl font-semibold text-gray-900">Strategy Backtest</h1>
+              <p className="text-sm text-gray-500">Test trading strategies with historical data</p>
+            </div>
+          </div>
+        </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        {/* Configuration Panel */}
-        <div className="lg:col-span-1 space-y-6">
-          {/* Instrument Selection */}
-          <div className="card">
-            <h2 className="text-lg font-semibold text-gray-900 mb-4">Instrument Selection</h2>
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Selected Instrument
-                </label>
-                <div className="flex items-center space-x-2 p-3 bg-gray-50 rounded-lg">
-                  {(() => {
-                    const IconComponent = getInstrumentTypeIcon(
-                      popularInstruments.stocks.find(s => s.symbol === selectedSymbol)?.type ||
-                      popularInstruments.etfs.find(s => s.symbol === selectedSymbol)?.type ||
-                      popularInstruments.crypto.find(s => s.symbol === selectedSymbol)?.type ||
-                      popularInstruments.indices.find(s => s.symbol === selectedSymbol)?.type ||
-                      'stock'
-                    );
-                    return <IconComponent className="h-5 w-5 text-gray-400" />;
-                  })()}
-                  <span className="font-medium">{selectedSymbol}</span>
-                </div>
+      {/* Content */}
+      <div className="p-6">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Configuration Panel */}
+          <div className="lg:col-span-1 space-y-6">
+            {/* Instrument Selection */}
+            <div className="bg-white rounded-lg border border-gray-200 p-4">
+              <div className="flex items-center space-x-2 mb-4">
+                <BuildingOfficeIcon className="w-4 h-4 text-gray-600" />
+                <h2 className="text-sm font-medium text-gray-900">Instrument Selection</h2>
               </div>
-
-              <div className="grid grid-cols-2 gap-2">
-                {Object.entries(popularInstruments).map(([category, instruments]) => (
-                  <div key={category} className="space-y-2">
-                    <h3 className="text-sm font-medium text-gray-700 capitalize">{category}</h3>
-                    <div className="space-y-1">
-                      {instruments.slice(0, 4).map((instrument) => {
-                        const IconComponent = getInstrumentTypeIcon(instrument.type);
-                        return (
-                          <button
-                            key={instrument.symbol}
-                            onClick={() => handleInstrumentSelect(instrument)}
-                            className={`w-full text-left p-2 rounded-md text-sm transition-colors ${
-                              selectedSymbol === instrument.symbol
-                                ? 'bg-primary-100 text-primary-700 border border-primary-300'
-                                : 'hover:bg-gray-50 border border-transparent'
-                            }`}
-                          >
-                            <div className="flex items-center space-x-2">
-                              <IconComponent className="h-4 w-4" />
-                              <span className="font-medium">{instrument.symbol}</span>
-                            </div>
-                            <div className="text-xs text-gray-500 truncate">{instrument.name}</div>
-                          </button>
-                        );
-                      })}
-                    </div>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Selected Instrument
+                  </label>
+                  <div className="flex items-center space-x-2 p-3 bg-gray-50 rounded-lg">
+                    {(() => {
+                      const IconComponent = getInstrumentTypeIcon(
+                        popularInstruments.stocks.find(s => s.symbol === selectedSymbol)?.type ||
+                        popularInstruments.etfs.find(s => s.symbol === selectedSymbol)?.type ||
+                        popularInstruments.crypto.find(s => s.symbol === selectedSymbol)?.type ||
+                        popularInstruments.indices.find(s => s.symbol === selectedSymbol)?.type ||
+                        'stock'
+                      );
+                      return <IconComponent className="h-5 w-5 text-gray-400" />;
+                    })()}
+                    <span className="font-medium">{selectedSymbol}</span>
                   </div>
-                ))}
-              </div>
-            </div>
-          </div>
+                </div>
 
-          {/* Backtest Configuration */}
-          <div className="card">
-            <h2 className="text-lg font-semibold text-gray-900 mb-4">Backtest Configuration</h2>
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Date Range
-                </label>
                 <div className="grid grid-cols-2 gap-2">
-                  <div>
-                    <label className="block text-xs text-gray-500 mb-1">Start Date</label>
-                    <input
-                      type="date"
-                      value={startDate}
-                      onChange={(e) => setStartDate(e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs text-gray-500 mb-1">End Date</label>
-                    <input
-                      type="date"
-                      value={endDate}
-                      onChange={(e) => setEndDate(e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
-                    />
-                  </div>
+                  {Object.entries(popularInstruments).map(([category, instruments]) => (
+                    <div key={category} className="space-y-2">
+                      <h3 className="text-sm font-medium text-gray-700 capitalize">{category}</h3>
+                      <div className="space-y-1">
+                        {instruments.slice(0, 4).map((instrument) => {
+                          const IconComponent = getInstrumentTypeIcon(instrument.type);
+                          return (
+                            <button
+                              key={instrument.symbol}
+                              onClick={() => handleInstrumentSelect(instrument)}
+                              className={`w-full text-left p-2 rounded-md text-sm transition-colors ${
+                                selectedSymbol === instrument.symbol
+                                  ? 'bg-blue-100 text-blue-700 border border-blue-300'
+                                  : 'hover:bg-gray-50 border border-transparent'
+                              }`}
+                            >
+                              <div className="flex items-center space-x-2">
+                                <IconComponent className="h-4 w-4 text-gray-400" />
+                                <span>{instrument.symbol}</span>
+                              </div>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ))}
                 </div>
               </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Initial Capital
-                </label>
-                <input
-                  type="number"
-                  value={initialCapital}
-                  onChange={(e) => setInitialCapital(e.target.value)}
-                  min="1000"
-                  step="1000"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
-                />
-              </div>
             </div>
-          </div>
 
-          {/* Strategy Selection */}
-          <div className="card">
-            <h2 className="text-lg font-semibold text-gray-900 mb-4">Trading Strategy</h2>
-            <div className="space-y-3">
-              {strategies.map((strategyOption) => {
-                const IconComponent = strategyOption.icon;
-                return (
+            {/* Strategy Selection */}
+            <div className="bg-white rounded-lg border border-gray-200 p-4">
+              <div className="flex items-center space-x-2 mb-4">
+                <CpuChipIcon className="w-4 h-4 text-gray-600" />
+                <h2 className="text-sm font-medium text-gray-900">Strategy Selection</h2>
+              </div>
+              <div className="space-y-3">
+                {strategies.map((strategyOption) => (
                   <button
                     key={strategyOption.id}
                     onClick={() => handleStrategySelect(strategyOption.id)}
                     className={`w-full text-left p-3 rounded-lg border transition-colors ${
                       strategy === strategyOption.id
-                        ? 'border-primary-500 bg-primary-50 text-primary-700'
+                        ? 'border-blue-500 bg-blue-50 text-blue-700'
                         : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
                     }`}
                   >
                     <div className="flex items-center space-x-2 mb-1">
-                      <IconComponent className="h-4 w-4" />
-                      <p className="text-sm font-medium">{strategyOption.name}</p>
+                      <FireIcon className="h-4 w-4 text-gray-500" />
+                      <span className="font-medium">{strategyOption.name}</span>
                     </div>
                     <p className="text-xs text-gray-500">{strategyOption.description}</p>
                   </button>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Strategy Parameters */}
-          {strategy && (
-            <div className="card">
-              <h2 className="text-lg font-semibold text-gray-900 mb-4">Strategy Parameters</h2>
-              <div className="space-y-3">
-                {strategies.find(s => s.id === strategy)?.parameters.map((param) => (
-                  <div key={param.name}>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      {param.label}
-                    </label>
-                    <input
-                      type={param.type}
-                      value={strategyParams[param.name] || param.default}
-                      onChange={(e) => handleParamChange(param.name, parseFloat(e.target.value))}
-                      min={param.min}
-                      max={param.max}
-                      step={param.step || 1}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
-                    />
-                  </div>
                 ))}
               </div>
             </div>
-          )}
 
-          {/* Run Backtest Button */}
-          <div className="card">
+            {/* Backtest Parameters */}
+            <div className="bg-white rounded-lg border border-gray-200 p-4">
+              <div className="flex items-center space-x-2 mb-4">
+                <ClockIcon className="w-4 h-4 text-gray-600" />
+                <h2 className="text-sm font-medium text-gray-900">Backtest Parameters</h2>
+              </div>
+              <div className="space-y-4">
+                <div>
+                  <label htmlFor="start-date" className="block text-sm font-medium text-gray-700">Start Date</label>
+                  <input
+                    type="date"
+                    id="start-date"
+                    value={startDate}
+                    onChange={(e) => setStartDate(e.target.value)}
+                    className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                  />
+                </div>
+                <div>
+                  <label htmlFor="end-date" className="block text-sm font-medium text-gray-700">End Date</label>
+                  <input
+                    type="date"
+                    id="end-date"
+                    value={endDate}
+                    onChange={(e) => setEndDate(e.target.value)}
+                    className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                  />
+                </div>
+                <div>
+                  <label htmlFor="initial-capital" className="block text-sm font-medium text-gray-700">Initial Capital</label>
+                  <input
+                    type="number"
+                    id="initial-capital"
+                    value={initialCapital}
+                    onChange={(e) => setInitialCapital(parseFloat(e.target.value))}
+                    className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                    min="1"
+                  />
+                </div>
+              </div>
+            </div>
+
             <button
               onClick={handleRunBacktest}
-              disabled={isRunning}
-              className={`w-full flex items-center justify-center space-x-2 px-4 py-3 rounded-lg font-medium transition-colors ${
-                isRunning
-                  ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                  : 'bg-primary-600 text-white hover:bg-primary-700'
-              }`}
+              disabled={isBacktesting}
+              className="w-full flex items-center justify-center space-x-2 px-4 py-3 border border-transparent text-base font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {isRunning ? (
+              {isBacktesting ? (
                 <>
-                  <LoadingSpinner size="sm" />
+                  <LoadingSpinner size="sm" color="white" />
                   <span>Running Backtest...</span>
                 </>
               ) : (
@@ -417,159 +291,101 @@ const Backtest = () => {
               )}
             </button>
           </div>
-        </div>
 
-        {/* Results Panel */}
-        <div className="lg:col-span-2 space-y-6">
-          {!backtestResults ? (
-            <div className="card">
-              <div className="text-center py-12">
-                <ChartBarIcon className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                <h3 className="text-lg font-medium text-gray-900 mb-2">No Backtest Results</h3>
-                <p className="text-gray-500">
-                  Configure your strategy and click "Run Backtest" to see results.
-                </p>
+          {/* Results Panel */}
+          <div className="lg:col-span-2 space-y-6">
+            {isBacktesting && (
+              <div className="bg-white rounded-lg border border-gray-200 p-6 text-center">
+                <LoadingSpinner size="lg" />
+                <p className="mt-4 text-lg text-gray-600">Analyzing historical data...</p>
               </div>
-            </div>
-          ) : (
-            <>
-              {/* Performance Summary */}
-              <div className="card">
-                <h2 className="text-lg font-semibold text-gray-900 mb-4">Performance Summary</h2>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                  <div className="metric-card">
-                    <p className="text-sm font-medium text-gray-600">Total Return</p>
-                    <p className={`text-2xl font-bold ${
-                      backtestResults.total_return >= 0 ? 'text-green-600' : 'text-red-600'
-                    }`}>
-                      {formatPercentage(backtestResults.total_return)}
-                    </p>
+            )}
+
+            {backtestResults && (
+              <>
+                <div className="bg-white rounded-lg border border-gray-200 p-6">
+                  <div className="flex items-center space-x-2 mb-4">
+                    <DocumentChartBarIcon className="w-5 h-5 text-gray-600" />
+                    <h2 className="text-lg font-semibold text-gray-900">Backtest Summary</h2>
                   </div>
-                  <div className="metric-card">
-                    <p className="text-sm font-medium text-gray-600">Final Value</p>
-                    <p className="text-2xl font-bold text-gray-900">
-                      {formatCurrency(backtestResults.final_value)}
-                    </p>
-                  </div>
-                  <div className="metric-card">
-                    <p className="text-sm font-medium text-gray-600">Max Drawdown</p>
-                    <p className="text-2xl font-bold text-red-600">
-                      {formatPercentage(backtestResults.max_drawdown)}
-                    </p>
-                  </div>
-                  <div className="metric-card">
-                    <p className="text-sm font-medium text-gray-600">Sharpe Ratio</p>
-                    <p className="text-2xl font-bold text-gray-900">
-                      {backtestResults.sharpe_ratio?.toFixed(2) || 'N/A'}
-                    </p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                    <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
+                      <p className="text-sm text-blue-800">Total Return</p>
+                      <p className="text-xl font-bold text-blue-900">{formatPercentage(backtestResults.total_return)}</p>
+                    </div>
+                    <div className="bg-green-50 p-4 rounded-lg border border-green-200">
+                      <p className="text-sm text-green-800">Sharpe Ratio</p>
+                      <p className="text-xl font-bold text-green-900">{backtestResults.sharpe_ratio?.toFixed(2) || 'N/A'}</p>
+                    </div>
+                    <div className="bg-red-50 p-4 rounded-lg border border-red-200">
+                      <p className="text-sm text-red-800">Max Drawdown</p>
+                      <p className="text-xl font-bold text-red-900">{formatPercentage(backtestResults.max_drawdown)}</p>
+                    </div>
+                    <div className="bg-yellow-50 p-4 rounded-lg border border-yellow-200">
+                      <p className="text-sm text-yellow-800">Win Rate</p>
+                      <p className="text-xl font-bold text-yellow-900">{formatPercentage(backtestResults.win_rate)}</p>
+                    </div>
+                    <div className="bg-purple-50 p-4 rounded-lg border border-purple-200">
+                      <p className="text-sm text-purple-800">Trades Executed</p>
+                      <p className="text-xl font-bold text-purple-900">{backtestResults.trades_executed}</p>
+                    </div>
                   </div>
                 </div>
-              </div>
 
-              {/* Trade Statistics */}
-              <div className="card">
-                <h2 className="text-lg font-semibold text-gray-900 mb-4">Trade Statistics</h2>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                  <div className="metric-card">
-                    <p className="text-sm font-medium text-gray-600">Total Trades</p>
-                    <p className="text-2xl font-bold text-gray-900">
-                      {backtestResults.total_trades || 0}
-                    </p>
+                <div className="bg-white rounded-lg border border-gray-200 p-6">
+                  <div className="flex items-center space-x-2 mb-4">
+                    <ChartBarIcon className="w-5 h-5 text-gray-600" />
+                    <h2 className="text-lg font-semibold text-gray-900">Equity Curve</h2>
                   </div>
-                  <div className="metric-card">
-                    <p className="text-sm font-medium text-gray-600">Win Rate</p>
-                    <p className="text-2xl font-bold text-gray-900">
-                      {backtestResults.win_rate ? formatPercentage(backtestResults.win_rate) : 'N/A'}
-                    </p>
-                  </div>
-                  <div className="metric-card">
-                    <p className="text-sm font-medium text-gray-600">Avg Win</p>
-                    <p className="text-2xl font-bold text-green-600">
-                      {backtestResults.avg_win ? formatCurrency(backtestResults.avg_win) : 'N/A'}
-                    </p>
-                  </div>
-                  <div className="metric-card">
-                    <p className="text-sm font-medium text-gray-600">Avg Loss</p>
-                    <p className="text-2xl font-bold text-red-600">
-                      {backtestResults.avg_loss ? formatCurrency(backtestResults.avg_loss) : 'N/A'}
-                    </p>
-                  </div>
+                  <EquityCurveChart data={backtestResults.equity_curve} height={300} />
                 </div>
-              </div>
 
-              {/* Equity Curve Chart */}
-              <div className="card">
-                <h2 className="text-lg font-semibold text-gray-900 mb-4">Equity Curve</h2>
-                <EquityCurveChart 
-                  data={backtestResults.equity_curve} 
-                  title={`${selectedSymbol} - ${strategies.find(s => s.id === strategy)?.name}`}
-                />
-              </div>
-
-              {/* Trade History */}
-              {backtestResults.trades && backtestResults.trades.length > 0 && (
-                <div className="card">
-                  <h2 className="text-lg font-semibold text-gray-900 mb-4">Trade History</h2>
-                  <div className="overflow-x-auto">
-                    <table className="min-w-full divide-y divide-gray-200">
-                      <thead className="bg-gray-50">
-                        <tr>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            Date
-                          </th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            Type
-                          </th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            Price
-                          </th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            Quantity
-                          </th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            P&L
-                          </th>
-                        </tr>
-                      </thead>
-                      <tbody className="bg-white divide-y divide-gray-200">
-                        {backtestResults.trades.slice(0, 10).map((trade, index) => (
-                          <tr key={index}>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                              {new Date(trade.date).toLocaleDateString()}
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap">
-                              <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                                trade.type === 'buy' 
-                                  ? 'bg-green-100 text-green-800' 
-                                  : 'bg-red-100 text-red-800'
-                              }`}>
-                                {trade.type.toUpperCase()}
-                              </span>
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                              {formatCurrency(trade.price)}
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                              {trade.quantity}
-                            </td>
-                            <td className={`px-6 py-4 whitespace-nowrap text-sm font-medium ${
-                              trade.pnl >= 0 ? 'text-green-600' : 'text-red-600'
-                            }`}>
-                              {trade.pnl ? formatCurrency(trade.pnl) : '-'}
-                            </td>
+                {backtestResults.trades && backtestResults.trades.length > 0 && (
+                  <div className="bg-white rounded-lg border border-gray-200">
+                    <div className="px-6 py-4 border-b border-gray-200">
+                      <h3 className="text-lg font-medium text-gray-900">Trade Log</h3>
+                    </div>
+                    <div className="overflow-x-auto">
+                      <table className="min-w-full divide-y divide-gray-200">
+                        <thead className="bg-gray-50">
+                          <tr>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Symbol</th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Shares</th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Entry Price</th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Exit Price</th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">P/L</th>
                           </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                        </thead>
+                        <tbody className="bg-white divide-y divide-gray-200">
+                          {backtestResults.trades.map((trade, index) => (
+                            <tr key={index}>
+                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{new Date(trade.date).toLocaleDateString()}</td>
+                              <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{trade.symbol}</td>
+                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 capitalize">{trade.type}</td>
+                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{trade.shares}</td>
+                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{formatCurrency(trade.entry_price)}</td>
+                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{trade.exit_price ? formatCurrency(trade.exit_price) : '-'}</td>
+                              <td className={`px-6 py-4 whitespace-nowrap text-sm font-medium ${
+                                trade.pnl >= 0 ? 'text-green-600' : 'text-red-600'
+                              }`}>
+                                {trade.pnl ? formatCurrency(trade.pnl) : '-'}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
                   </div>
-                </div>
-              )}
-            </>
-          )}
+                )}
+              </>
+            )}
+          </div>
         </div>
       </div>
     </div>
   );
 };
 
-export default Backtest; 
+export default Backtest;

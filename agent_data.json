@@ -1,12 +1,12 @@
 {
   "agents": [
     {
-      "id": "4715edd1-8342-43ce-91e5-bc620a1d87d9",
+      "id": "89d48e4b-c130-4648-aad6-091c9d7fc2f0",
       "name": "Admin Agent",
       "email": "admin@aistockbroker.com",
       "role": "AgentRole.DIRECTOR",
       "password_hash": "240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720a9",
-      "created_at": "2025-09-24 05:11:57.786570",
+      "created_at": "2025-10-05 14:41:11.812103",
       "last_login": null,
       "is_active": true,
       "customers": []

@@ -17,6 +17,7 @@ import {
   UserGroupIcon,
   LightBulbIcon
 } from '@heroicons/react/24/outline';
+import ModernIcon, { IconButton } from '../UI/ModernIcon';
 import { useStore } from '../../store/store';
 import { useAuth } from '../../contexts/AuthContext';
 import toast from 'react-hot-toast';
@@ -25,7 +26,7 @@ const Header = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const { sidebarOpen, toggleSidebar } = useStore();
-  const { user, logout, isAdmin } = useAuth();
+  const { user, logout, isAdmin, updateSelectedRole } = useAuth();
   const [scrolled, setScrolled] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
 
@@ -72,6 +73,27 @@ const Header = () => {
       toast.error('Error logging out');
     }
     setUserMenuOpen(false);
+  };
+
+  const handleRoleSwitch = (newRole) => {
+    updateSelectedRole(newRole);
+    toast.success(`Switched to ${newRole} role`);
+    setUserMenuOpen(false);
+    
+    // Navigate to appropriate dashboard based on role
+    switch (newRole) {
+      case 'admin':
+        navigate('/admin');
+        break;
+      case 'agent':
+        navigate('/agent/dashboard');
+        break;
+      case 'customer':
+      case 'user':
+      default:
+        navigate('/dashboard');
+        break;
+    }
   };
 
   const handleNavigationClick = (e, href) => {
@@ -131,19 +153,24 @@ const Header = () => {
             onClick={toggleSidebar}
             className="lg:hidden p-2 rounded-xl text-gray-500 hover:text-primary-600 hover:bg-primary-50 focus:outline-none focus:ring-2 focus:ring-primary-500 transition-all duration-200 hover:scale-105 active:scale-95"
           >
-            {sidebarOpen ? (
-              <XMarkIcon className="h-6 w-6" />
-            ) : (
-              <Bars3Icon className="h-6 w-6" />
-            )}
+            <ModernIcon 
+              name={sidebarOpen ? "close" : "menu"} 
+              size="md" 
+              color="primary" 
+              effect="rotate"
+            />
           </button>
 
           {/* Logo and Title */}
           <Link to="/" className="flex items-center space-x-3 group">
             <div className="relative">
-              <div className="w-10 h-10 bg-gradient-to-br from-primary-500 via-primary-600 to-secondary-600 rounded-2xl flex items-center justify-center shadow-modern group-hover:shadow-neon transition-all duration-300 group-hover:scale-105">
-                <SparklesIcon className="h-5 w-5 text-white" />
-              </div>
+              <ModernIcon 
+                name="sparkles" 
+                size="md" 
+                color="white" 
+                effect="pulse"
+                container
+              />
               <div className="absolute -inset-1 bg-gradient-to-br from-primary-400 to-secondary-500 rounded-2xl opacity-30 group-hover:opacity-60 animate-pulse-glow"></div>
             </div>
             <div className="hidden sm:block">
@@ -175,7 +202,11 @@ const Header = () => {
                   }`}
                 >
                   <div className="flex items-center space-x-2">
-                    <item.icon className="h-4 w-4" />
+                    <ModernIcon 
+                      name={item.name.toLowerCase().replace(' ', '-')} 
+                      size="sm" 
+                      color="primary" 
+                    />
                     <span>{item.name}</span>
                   </div>
                   {/* Tooltip */}
@@ -226,7 +257,12 @@ const Header = () => {
                 </div>
                 <div className="text-sm">
                   <div className="font-medium text-gray-900">{getUserDisplayName()}</div>
-                  <div className="text-gray-500 text-xs">{user?.role?.toUpperCase()}</div>
+                  <div className="text-gray-500 text-xs">
+                    {(user?.selectedRole || user?.role || 'user').toUpperCase()}
+                    {user?.roles && user.roles.length > 1 && (
+                      <span className="ml-1 text-indigo-600">• {user.roles.length} roles</span>
+                    )}
+                  </div>
                 </div>
               </button>
 
@@ -262,6 +298,38 @@ const Header = () => {
                         </Link>
                       </>
                     )}
+                    
+                    {/* Role Switcher for users with multiple roles */}
+                    {user?.roles && user.roles.length > 1 && (
+                      <>
+                        <hr className="my-1" />
+                        <div className="px-2 py-1">
+                          <div className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">
+                            Switch Role
+                          </div>
+                          {user.roles.map((role) => (
+                            <button
+                              key={role}
+                              onClick={() => handleRoleSwitch(role)}
+                              className={`flex items-center w-full text-left px-2 py-1 text-sm rounded-md hover:bg-gray-100 ${
+                                user.selectedRole === role 
+                                  ? 'bg-indigo-50 text-indigo-700' 
+                                  : 'text-gray-700'
+                              }`}
+                            >
+                              {role === 'admin' && <ShieldCheckIcon className="h-3 w-3 mr-2" />}
+                              {role === 'agent' && <UserGroupIcon className="h-3 w-3 mr-2" />}
+                              {(role === 'customer' || role === 'user') && <UserIcon className="h-3 w-3 mr-2" />}
+                              {role.charAt(0).toUpperCase() + role.slice(1)}
+                              {user.selectedRole === role && (
+                                <span className="ml-auto text-xs text-indigo-600">✓</span>
+                              )}
+                            </button>
+                          ))}
+                        </div>
+                      </>
+                    )}
+                    
                     <hr className="my-1" />
                     <button
                       onClick={handleLogout}

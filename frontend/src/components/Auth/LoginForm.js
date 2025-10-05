@@ -7,12 +7,11 @@ import { useAuth } from '../../contexts/AuthContext';
 const LoginForm = ({ onSuccess, redirectTo = null }) => {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
-  const { login } = useAuth();
+  const { login, updateSelectedRole } = useAuth();
   const [formData, setFormData] = useState({
     emailOrUsername: '',
     password: '',
-    rememberMe: false,
-    role: searchParams.get('role') || ''
+    rememberMe: false
   });
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -76,19 +75,17 @@ const LoginForm = ({ onSuccess, redirectTo = null }) => {
       );
 
       if (result.success) {
-        // Check if user has multiple roles
-        const userRoles = result.user?.roles || [result.user?.role];
-
-        if (userRoles.length > 1) {
-          // Show role selection if user has multiple roles
+        // Check if user has multiple roles or no primary role
+        if (result.user?.has_multiple_roles || !result.user?.primary_role) {
+          // Show role selection if user has multiple roles or no primary role
           setLoginResult(result);
-          setAvailableRoles(userRoles);
+          setAvailableRoles(result.user.roles);
           setShowRoleSelection(true);
           setIsLoading(false);
           toast.success('Please select your role to continue');
         } else {
           // Single role - proceed with login
-          const selectedRole = userRoles[0];
+          const selectedRole = result.user?.primary_role || result.user?.role;
           completeLogin(result, selectedRole);
         }
       } else {
@@ -142,6 +139,8 @@ const LoginForm = ({ onSuccess, redirectTo = null }) => {
 
   const handleRoleSelect = (role) => {
     setFormData(prev => ({ ...prev, role }));
+    // Update the selected role in the auth context
+    updateSelectedRole(role);
     completeLogin(loginResult, role);
   };
 

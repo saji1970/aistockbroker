@@ -4,17 +4,18 @@ import { useAuth } from './contexts/AuthContext';
 import Layout from './components/Layout/Layout';
 import LoadingSpinner from './components/UI/LoadingSpinner';
 import ProtectedRoute, { AdminRoute, GuestRoute } from './components/Auth/ProtectedRoute';
-import LoginForm from './components/Auth/LoginForm';
 import RegisterForm from './components/Auth/RegisterForm';
 import ProfilePage from './components/Auth/ProfilePage';
 import AdminDashboard from './components/Admin/AdminDashboard';
 import UserManagement from './components/Admin/UserManagement';
+import AIPromptManager from './components/Admin/AIPromptManager';
 import TradingAccessHandler from './components/TradingAccessHandler';
 import ScrollToTop from './components/ScrollToTop';
 
 // Lazy load pages
 const Homepage = React.lazy(() => import('./pages/Homepage'));
 const Dashboard = React.lazy(() => import('./pages/Dashboard'));
+const CustomerDashboard = React.lazy(() => import('./pages/CustomerDashboard'));
 const Portfolio = React.lazy(() => import('./pages/Portfolio'));
 const AIAssistant = React.lazy(() => import('./pages/AIAssistant'));
 const Backtest = React.lazy(() => import('./pages/Backtest'));
@@ -23,8 +24,19 @@ const TradingBot = React.lazy(() => import('./pages/TradingBotNew'));
 // Agent pages
 const AgentDashboard = React.lazy(() => import('./pages/AgentDashboard'));
 
+// Role-based route component
+const RoleBasedRoute = ({ children, requiredRoles }) => {
+  const { user, hasAnyRole } = useAuth();
+  
+  if (!user || !hasAnyRole(requiredRoles)) {
+    return <Navigate to="/" replace />;
+  }
+  
+  return children;
+};
+
 function App() {
-  const { isAuthenticated, isLoading } = useAuth();
+  const { isLoading, user, isAdmin } = useAuth();
 
   if (isLoading) {
     return <LoadingSpinner />;
@@ -35,21 +47,13 @@ function App() {
       <ScrollToTop />
       <Suspense fallback={<LoadingSpinner />}>
         <Routes>
-        {/* Public homepage - accessible to everyone */}
+        {/* Homepage - accessible to everyone, shows different content based on auth status */}
         <Route
           path="/"
           element={<Homepage />}
         />
 
         {/* Guest routes (only accessible when not logged in) */}
-        <Route
-          path="/login"
-          element={
-            <GuestRoute>
-              <LoginForm />
-            </GuestRoute>
-          }
-        />
         <Route
           path="/register"
           element={
@@ -63,30 +67,42 @@ function App() {
         <Route
           path="/dashboard"
           element={
-            <ProtectedRoute requireTrading={true}>
-              <Layout>
-                <Dashboard />
-              </Layout>
+            <ProtectedRoute>
+              {isAdmin() ? (
+                <Layout>
+                  <Dashboard />
+                </Layout>
+              ) : user?.role === 'agent' ? (
+                <Layout>
+                  <AgentDashboard />
+                </Layout>
+              ) : (
+                <Layout>
+                  <CustomerDashboard />
+                </Layout>
+              )}
             </ProtectedRoute>
           }
         />
         <Route
           path="/portfolio"
           element={
-            <ProtectedRoute requireTrading={true}>
-              <Layout>
-                <Portfolio />
-              </Layout>
+            <ProtectedRoute>
+              <RoleBasedRoute requiredRoles={['customer', 'user', 'agent', 'admin']}>
+                <Layout>
+                  <Portfolio />
+                </Layout>
+              </RoleBasedRoute>
             </ProtectedRoute>
           }
         />
         <Route
           path="/ai-assistant"
           element={
-            <ProtectedRoute requireTrading={true}>
-              <Layout>
+            <ProtectedRoute>
+              <RoleBasedRoute requiredRoles={['customer', 'user', 'agent', 'admin']}>
                 <AIAssistant />
-              </Layout>
+              </RoleBasedRoute>
             </ProtectedRoute>
           }
         />
@@ -152,15 +168,27 @@ function App() {
                      </AdminRoute>
                    }
                  />
+                 <Route
+                   path="/admin/ai-prompts"
+                   element={
+                     <AdminRoute>
+                       <Layout>
+                         <AIPromptManager />
+                       </Layout>
+                     </AdminRoute>
+                   }
+                 />
 
                  {/* Agent routes */}
                  <Route
                    path="/agent"
                    element={
                      <ProtectedRoute>
-                       <Layout>
-                         <AgentDashboard />
-                       </Layout>
+                       <RoleBasedRoute requiredRoles={['agent', 'admin']}>
+                         <Layout>
+                           <AgentDashboard />
+                         </Layout>
+                       </RoleBasedRoute>
                      </ProtectedRoute>
                    }
                  />
@@ -168,9 +196,11 @@ function App() {
                    path="/agent/dashboard"
                    element={
                      <ProtectedRoute>
-                       <Layout>
-                         <AgentDashboard />
-                       </Layout>
+                       <RoleBasedRoute requiredRoles={['agent', 'admin']}>
+                         <Layout>
+                           <AgentDashboard />
+                         </Layout>
+                       </RoleBasedRoute>
                      </ProtectedRoute>
                    }
                  />

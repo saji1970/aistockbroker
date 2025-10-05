@@ -1,19 +1,19 @@
 steps:
-  # Build backend image
-  - name: 'gcr.io/cloud-builders/docker'
-    args: ['build', '-t', 'gcr.io/$PROJECT_ID/ai-stock-trading-backend:latest', '-f', 'Dockerfile', '.']
-    
-  # Build frontend image
+  # Build frontend first
   - name: 'gcr.io/cloud-builders/docker'
     args: ['build', '-t', 'gcr.io/$PROJECT_ID/ai-stock-trading-frontend:latest', '-f', 'Dockerfile.frontend', '.']
     
-  # Push backend image
+  # Build backend image
   - name: 'gcr.io/cloud-builders/docker'
-    args: ['push', 'gcr.io/$PROJECT_ID/ai-stock-trading-backend:latest']
+    args: ['build', '-t', 'gcr.io/$PROJECT_ID/ai-stock-trading-backend:latest', '-f', 'Dockerfile.api-server', '.']
     
   # Push frontend image
   - name: 'gcr.io/cloud-builders/docker'
     args: ['push', 'gcr.io/$PROJECT_ID/ai-stock-trading-frontend:latest']
+    
+  # Push backend image
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['push', 'gcr.io/$PROJECT_ID/ai-stock-trading-backend:latest']
     
   # Deploy to Cloud Run
   - name: 'gcr.io/cloud-builders/gcloud'

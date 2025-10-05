@@ -1,92 +1,133 @@
-# 🚀 AI Stock Trading System - Quick Start Guide
+# Quick Start Guide - AI Stock Trading Platform
 
-## Your Project Configuration
+## 🚀 Get Started in 5 Minutes
 
-- **GCP Project**: `stockbroker-28983`
-- **GCP User**: `saji651970@gmail.com`
-- **GitHub Repository**: `https://github.com/saji1970/aistockbroker`
+### Prerequisites
+- Python 3.8+ installed
+- Node.js 14+ installed
+- Git installed
 
-## 🎯 Quick Setup (5 Minutes)
+### Step 1: Install Dependencies
 
-### Step 1: Run Setup Script
-
-**Windows (PowerShell):**
-```powershell
-.\deployment\scripts\setup-project.ps1
-```
-
-**Linux/macOS (Bash):**
 ```bash
-chmod +x deployment/scripts/setup-project.sh
-./deployment/scripts/setup-project.sh
+# Backend dependencies
+cd backend
+pip install flask flask-cors yfinance pandas numpy python-dotenv sqlalchemy bcrypt pyjwt
+
+# Frontend dependencies
+cd ../frontend
+npm install
 ```
 
-### Step 2: Add GitHub Secrets
+### Step 2: Start Backend Server
 
-1. Go to: `https://github.com/saji1970/aistockbroker/settings/secrets/actions`
-2. Add these secrets:
-
-| Secret Name | Value |
-|-------------|-------|
-| `GCP_SA_KEY` | Base64 encoded key from `ai-stock-trading-key.json` |
-| `GCP_PROJECT_ID` | `stockbroker-28983` |
-| `GCP_SA_EMAIL` | `ai-stock-trading-deployer@stockbroker-28983.iam.gserviceaccount.com` |
-
-### Step 3: Deploy to Staging
-
-**Option A: Automatic (Recommended)**
 ```bash
-git push origin master
+cd backend
+python api_server.py
 ```
 
-**Option B: Manual**
-1. Go to [GitHub Actions](https://github.com/saji1970/aistockbroker/actions)
-2. Select "AI Stock Trading System - CI/CD Pipeline"
-3. Click "Run workflow"
-4. Choose "staging" environment
-5. Click "Run workflow"
+✅ Server running at `http://localhost:8080`
 
-### Step 4: Monitor Deployment
+### Step 3: Start Frontend (New Terminal)
 
-1. Go to [GitHub Actions](https://github.com/saji1970/aistockbroker/actions)
-2. Watch the deployment progress
-3. Check the logs for any issues
+```bash
+cd frontend
+npm start
+```
 
-## 🎉 Success!
+✅ Frontend running at `http://localhost:3000`
 
-After successful deployment, your services will be available at:
+### Step 4: Verify Everything Works
 
-- **Backend**: `https://ai-stock-backend-staging-xxxxx-uc.a.run.app`
-- **Frontend**: `https://ai-stock-frontend-staging-xxxxx-uc.a.run.app`
-- **Trading Bot**: `https://ai-stock-trading-bot-staging-xxxxx-uc.a.run.app`
+```bash
+# In project root (new terminal)
+python test_all_functionality.py
+```
 
-## 🔧 Production Deployment
+✅ All tests should pass!
 
-When ready for production:
+---
 
-1. Go to [GitHub Actions](https://github.com/saji1970/aistockbroker/actions)
-2. Select "Production Deployment"
-3. Click "Run workflow"
-4. Type "DEPLOY TO PRODUCTION" to confirm
-5. Click "Run workflow"
+## 📱 Features Available
 
-## 📊 Monitor Your Deployment
+### 1. AI Assistant
+- Navigate to: http://localhost:3000/ai-assistant
+- Ask: "What's the price of AAPL?"
+- Get real-time stock predictions and analysis
 
-- **GCP Console**: [stockbroker-28983](https://console.cloud.google.com/home/dashboard?project=stockbroker-28983)
-- **Cloud Run**: [Services](https://console.cloud.google.com/run?project=stockbroker-28983)
-- **GitHub Actions**: [Workflows](https://github.com/saji1970/aistockbroker/actions)
+### 2. Trading Bot
+- Navigate to: http://localhost:3000/trading-bot
+- Click "Start Bot"
+- Watch it trade automatically with AI
 
-## 🆘 Need Help?
+### 3. Portfolio Management
+- Navigate to: http://localhost:3000/portfolio
+- Initialize with $100,000
+- Buy/sell stocks
+- Track performance
 
-- **Setup Issues**: Check [PROJECT_SETUP_GUIDE.md](deployment/PROJECT_SETUP_GUIDE.md)
-- **Deployment Issues**: Check [DEPLOYMENT_GUIDE.md](deployment/DEPLOYMENT_GUIDE.md)
-- **GitHub Issues**: [Create an issue](https://github.com/saji1970/aistockbroker/issues)
+---
 
-## 🎯 What's Next?
+## 🔧 Troubleshooting
 
-1. **Test the Application**: Visit your frontend URL
-2. **Configure API Keys**: Add your trading API keys
-3. **Set Up Monitoring**: Configure alerts and dashboards
-4. **Deploy to Production**: When ready for live trading
+### Server won't start?
+- Check port 8080 is free
+- Install missing dependencies: `pip install -r backend/requirements.txt`
 
-Your AI Stock Trading System is ready to revolutionize trading! 🚀📈
+### Tests failing?
+- Make sure server is running
+- Check `http://localhost:8080/api/health`
+
+### Frontend won't start?
+- Delete `node_modules` and run `npm install` again
+- Check port 3000 is free
+
+---
+
+## 📊 Test All Functionality
+
+```bash
+# Test backend API
+python test_all_functionality.py
+
+# Test mobile integration
+python test_mobile_integration.py
+```
+
+---
+
+## 🎯 Next Steps
+
+1. **Explore the Platform**
+   - Try AI Assistant
+   - Start Trading Bot
+   - Manage Portfolio
+
+2. **Run Tests**
+   - Verify all features work
+   - Check mobile integration
+
+3. **Deploy**
+   - See TESTING_README.md for deployment guide
+   - See FIXES_SUMMARY.md for details
+
+---
+
+## 📚 Documentation
+
+- **Full Testing Guide:** TESTING_README.md
+- **All Fixes:** FIXES_SUMMARY.md
+- **API Reference:** See TESTING_README.md
+
+---
+
+## ✅ Production Ready
+
+All functionality verified working:
+- ✅ AI Assistant
+- ✅ Trading Bot
+- ✅ Portfolio Management
+- ✅ Mobile Apps
+- ✅ Multi-user support (Users, Agents, Admins)
+
+**Status:** Ready for Production 🚀

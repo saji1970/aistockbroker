@@ -1,1142 +1,584 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { PaperAirplaneIcon, GlobeAltIcon } from '@heroicons/react/24/outline';
-import ReactMarkdown from 'react-markdown';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { 
+  PaperAirplaneIcon,
+  PlusIcon,
+  Bars3Icon,
+  XMarkIcon,
+  TrashIcon,
+  CheckIcon,
+  XCircleIcon,
+  ArrowPathIcon,
+  ClipboardDocumentIcon,
+  Cog6ToothIcon,
+  SunIcon,
+  MoonIcon,
+  UserIcon,
+  SparklesIcon,
+  MagnifyingGlassIcon,
+  DocumentTextIcon,
+  ChartBarIcon,
+  CurrencyDollarIcon,
+  ArrowUpIcon,
+  ClockIcon,
+  ExclamationTriangleIcon,
+  InformationCircleIcon,
+  BookmarkIcon,
+  DocumentArrowDownIcon,
+  ChevronDownIcon,
+  CommandLineIcon,
+  HomeIcon
+} from '@heroicons/react/24/outline';
+import { toast } from 'react-hot-toast';
 import { dayTradingAPI, predictionAPI, stockAPI, marketMateAPI } from '../services/api';
 import { useStore } from '../store/store';
 import LoadingSpinner from '../components/UI/LoadingSpinner';
+import ChatMessage from '../components/UI/ChatMessage';
+import ChatInput from '../components/UI/ChatInput';
+import ExportChat from '../components/UI/ExportChat';
 
 const AIAssistant = () => {
-  const [messages, setMessages] = useState([
-    {
-      id: 1,
-      type: 'assistant',
-      content: `Hi there! 👋 I'm your AI stock trading assistant, powered by real-time market data from MarketStack API. I can help you with stock prices, predictions, and market analysis across multiple markets!
-
-Here's what I can do for you:
-
-📈 **Get Real-Time Stock Prices**
-- "What's the price of AAPL?"
-- "How much is MSFT stock?"
-- "Show me GOOGL current price"
-
-📊 **Market Analysis & Predictions**
-- "Predict AAPL direction for tomorrow"
-- "What's the confidence level for TSLA this week?"
-- "Analyze risk factors for META"
-
-🌍 **Multi-Market Support**
-- 🇺🇸 US: AAPL, MSFT, GOOGL, TSLA, META, NVDA
-- 🇬🇧 UK: VOD.L, HSBA.L, BP.L, GSK.L, AZN.L
-- 🇮🇳 India: RELIANCE.NS, TCS.NS, HDFCBANK.NS, INFY.NS
-- 🇨🇦 Canada, 🇦🇺 Australia, 🇩🇪 Germany, 🇯🇵 Japan, 🇧🇷 Brazil
-
-Just ask me anything about stocks in a natural way - I'll understand and give you real-time market data! 🚀`,
-      timestamp: new Date(),
-    },
-  ]);
+  // Navigation
+  const navigate = useNavigate();
+  
+  // State management
+  const { currentMarket } = useStore();
+  const [messages, setMessages] = useState([]);
   const [inputMessage, setInputMessage] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [chatHistory, setChatHistory] = useState([]);
+  const [currentChatId, setCurrentChatId] = useState(null);
+  const [copiedMessageId, setCopiedMessageId] = useState(null);
+  const [darkMode, setDarkMode] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
+  const [showExport, setShowExport] = useState(false);
+  const [isTyping, setIsTyping] = useState(false);
+  const [streamingMessage, setStreamingMessage] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedModel, setSelectedModel] = useState('gpt-4');
+  const [temperature, setTemperature] = useState(0.7);
+  const [maxTokens, setMaxTokens] = useState(2048);
+  
   const messagesEndRef = useRef(null);
-  const { currentSymbol, currentMarket } = useStore();
+  const inputRef = useRef(null);
+  const abortControllerRef = useRef(null);
 
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  };
+  // Auto-resize textarea
+  const autoResize = useCallback(() => {
+    const textarea = inputRef.current;
+    if (textarea) {
+      textarea.style.height = 'auto';
+      textarea.style.height = Math.min(textarea.scrollHeight, 200) + 'px';
+    }
+  }, []);
 
   useEffect(() => {
-    scrollToBottom();
-  }, [messages]);
+    autoResize();
+  }, [inputMessage, autoResize]);
 
-  const extractStockSymbol = (message) => {
-    // Enhanced Natural Language Query Detection
-    const isRankingQuery = /(?:top|best|worst|leading)\s+\d+\s+(loser|gainer|stock|performer)/i.test(message);
-    const isStartupQuery = /(?:give\s+(?:me|list\s+of)|show\s+me|get\s+me|find\s+me|what\s+are|tell\s+me\s+about|can\s+you\s+(?:give|show|get|find))\s+(?:the\s+)?(?:top|best|leading)\s+\d+\s+(?:ai\s+)?(?:tech|startup|start\s+up)/i.test(message);
-    const isTopStartupQuery = /(?:top|best|leading)\s+\d+\s+(?:ai\s+)?(?:tech|startup|start\s+up)/i.test(message);
-    const isListQuery = /(?:list|show|give|get)\s+(?:me\s+)?(?:the\s+)?\d+\s+(?:ai\s+)?(?:tech|startup|stock|company|performer)/i.test(message);
-    const isGeneralListQuery = /(?:list|show|give|get).*(?:stock|company|tech|startup)/i.test(message);
-    
-    if (isRankingQuery || isStartupQuery || isTopStartupQuery || isListQuery || isGeneralListQuery) {
-      return null; // Don't extract symbols for ranking or list queries
+  // Load chat history from localStorage
+  const loadChatHistory = useCallback(() => {
+    try {
+      const savedHistory = localStorage.getItem('ai-assistant-chat-history');
+      if (savedHistory) {
+        const parsedHistory = JSON.parse(savedHistory);
+        return parsedHistory.map(chat => ({
+          ...chat,
+          messages: chat.messages.map(msg => ({
+            ...msg,
+            timestamp: new Date(msg.timestamp)
+          })),
+          timestamp: new Date(chat.timestamp)
+        }));
+      }
+    } catch (error) {
+      console.error('Error loading chat history:', error);
     }
+    return [];
+  }, []);
+
+  // Save chat history to localStorage
+  const saveChatHistory = useCallback((chats) => {
+    try {
+      localStorage.setItem('ai-assistant-chat-history', JSON.stringify(chats));
+    } catch (error) {
+      console.error('Error saving chat history:', error);
+    }
+  }, []);
+
+  // Initialize chat history
+  useEffect(() => {
+    const history = loadChatHistory();
+    setChatHistory(history);
     
-    // Enhanced stock symbol patterns for multiple markets
-    const symbolPatterns = [
-      // UK market patterns (with .L suffix) - highest priority
-      /\b([A-Z]{2,5})\.L\b/g,
-      // India market patterns (with .NS suffix) - high priority
-      /\b([A-Z]{2,10})\.NS\b/g,
-      // US market patterns (3-5 letters, no suffix) - medium priority
-      /\b([A-Z]{3,5})\b/g,
-      // Generic patterns for any market - lowest priority
-      /\b([A-Z]{2,8})\b/g
-    ];
+    if (history.length === 0) {
+      createNewChat();
+    } else {
+      const latestChat = history[history.length - 1];
+      setCurrentChatId(latestChat.id);
+      setMessages(latestChat.messages || []);
+    }
+  }, [loadChatHistory]);
+
+  // Auto-scroll to bottom when messages change
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages, streamingMessage]);
+
+  // Create new chat
+  const createNewChat = useCallback(() => {
+    const newChat = {
+      id: Date.now().toString(),
+      title: 'New Chat',
+      messages: [],
+      timestamp: new Date(),
+      model: selectedModel,
+      temperature,
+      maxTokens
+    };
     
-    // Comprehensive list of words to exclude from symbol extraction
-    const excludeWords = [
-      // Common words
-      'THE', 'AND', 'FOR', 'WITH', 'ABOUT', 'FROM', 'INTO', 'DURING', 'BEFORE', 'AFTER', 'ABOVE', 'BELOW',
-      'THIS', 'THAT', 'THESE', 'THOSE', 'WHAT', 'WHEN', 'WHERE', 'WHY', 'HOW', 'WHO', 'WHICH',
-      'WILL', 'WOULD', 'COULD', 'SHOULD', 'MIGHT', 'MAY', 'CAN', 'MUST', 'SHALL',
-      
-      // Trading terms
-      'LOSER', 'GAINER', 'STOCK', 'PERFORMER', 'TOP', 'PREDICT', 'PREDICTION', 'ANALYSIS',
-      'LIST', 'SHOW', 'GIVE', 'ME', 'BEST', 'WORST', 'HOT', 'COLD', 'TRENDING',
-      'BUY', 'SELL', 'HOLD', 'TARGET', 'STOP', 'LOSS', 'PROFIT', 'GAIN', 'LOSE',
-      
-      // Currencies
-      'USD', 'GBP', 'INR', 'EUR', 'CAD', 'AUD', 'JPY', 'BRL', 'CNY', 'CHF', 'SEK', 'NOK',
-      
-      // Market terms
-      'MARKET', 'PRICE', 'SHARE', 'SHARES', 'VOLUME', 'TRADE', 'TRADING', 'INVEST', 'INVESTMENT',
-      'PORTFOLIO', 'ASSET', 'ASSETS', 'EQUITY', 'BOND', 'BONDS', 'FUND', 'FUNDS',
-      
-      // Time terms
-      'TODAY', 'TOMORROW', 'YESTERDAY', 'WEEK', 'MONTH', 'YEAR', 'TIME', 'DATE', 'HOUR', 'MINUTE',
-      
-      // Direction terms
-      'UP', 'DOWN', 'HIGH', 'LOW', 'RISE', 'FALL', 'INCREASE', 'DECREASE', 'GROW', 'SHRINK',
-      
-      // Common abbreviations
-      'US', 'UK', 'CA', 'AU', 'DE', 'JP', 'IN', 'BR', 'EU', 'UN', 'UNITED', 'STATES', 'KINGDOM',
-      
-      // Other common words
-      'NEW', 'OLD', 'BIG', 'SMALL', 'GOOD', 'BAD', 'YES', 'NO', 'OK', 'NOW', 'THEN', 'HERE', 'THERE'
-    ];
+    const updatedHistory = [...chatHistory, newChat];
+    setChatHistory(updatedHistory);
+    setCurrentChatId(newChat.id);
+    setMessages([]);
+    saveChatHistory(updatedHistory);
+    setSidebarOpen(false);
+    inputRef.current?.focus();
+  }, [chatHistory, selectedModel, temperature, maxTokens, saveChatHistory]);
+
+  // Load chat
+  const loadChat = useCallback((chatId) => {
+    const chat = chatHistory.find(c => c.id === chatId);
+    if (chat) {
+      setCurrentChatId(chatId);
+      setMessages(chat.messages || []);
+      setSidebarOpen(false);
+      setSelectedModel(chat.model || 'gpt-4');
+      setTemperature(chat.temperature || 0.7);
+      setMaxTokens(chat.maxTokens || 2048);
+    }
+  }, [chatHistory]);
+
+  // Delete chat
+  const deleteChat = useCallback((chatId) => {
+    const updatedHistory = chatHistory.filter(c => c.id !== chatId);
+    setChatHistory(updatedHistory);
+    saveChatHistory(updatedHistory);
     
-    // Try to find stock symbols using patterns (in order of priority)
-    for (const pattern of symbolPatterns) {
-      const matches = message.toUpperCase().match(pattern);
-      if (matches) {
-        for (const match of matches) {
-          const symbol = match.replace(/\.(L|NS|TO|AX|DE|T|SA)$/, ''); // Remove market suffixes
-          if (!excludeWords.includes(symbol) && symbol.length >= 2 && symbol.length <= 10) {
-            // Additional validation: check if it's not part of a larger word
-            const wordBoundaryCheck = new RegExp(`\\b${match}\\b`, 'i');
-            if (wordBoundaryCheck.test(message)) {
-              return match; // Return the full symbol with suffix if present
-            }
-          }
-        }
+    if (currentChatId === chatId) {
+      if (updatedHistory.length > 0) {
+        loadChat(updatedHistory[0].id);
+      } else {
+        createNewChat();
       }
     }
-    
-    // Fallback: try to find 2-10 letter uppercase words that might be stock symbols
-    const words = message.toUpperCase().split(/\s+/);
-    const potentialSymbols = words.filter(word => 
-      word.length >= 2 && word.length <= 10 && 
-      /^[A-Z]+$/.test(word) && 
-      !excludeWords.includes(word) &&
-      !/^(THE|AND|FOR|WITH|ABOUT|FROM|INTO|DURING|BEFORE|AFTER|ABOVE|BELOW|THIS|THAT|THESE|THOSE|WHAT|WHEN|WHERE|WHY|HOW|WHO|WHICH|WILL|WOULD|COULD|SHOULD|MIGHT|MAY|CAN|MUST|SHALL|TODAY|TOMORROW|YESTERDAY|WEEK|MONTH|YEAR|TIME|DATE|HOUR|MINUTE|UP|DOWN|HIGH|LOW|RISE|FALL|INCREASE|DECREASE|GROW|SHRINK|NEW|OLD|BIG|SMALL|GOOD|BAD|YES|NO|OK|NOW|THEN|HERE|THERE)$/.test(word)
+  }, [chatHistory, currentChatId, createNewChat, loadChat, saveChatHistory]);
+
+  // Update chat title
+  const updateChatTitle = useCallback((chatId, title) => {
+    const updatedHistory = chatHistory.map(chat => 
+      chat.id === chatId ? { ...chat, title } : chat
     );
-    
-    return potentialSymbols[0] || null;
-  };
+    setChatHistory(updatedHistory);
+    saveChatHistory(updatedHistory);
+  }, [chatHistory, saveChatHistory]);
 
-  const detectMarketFromSymbol = (symbol) => {
-    if (!symbol) return 'US';
-    
-    // Market detection based on symbol patterns
-    if (symbol.includes('.L')) return 'UK';
-    if (symbol.includes('.NS')) return 'IN';
-    if (symbol.includes('.TO')) return 'CA';
-    if (symbol.includes('.AX')) return 'AU';
-    if (symbol.includes('.DE')) return 'DE';
-    if (symbol.includes('.T')) return 'JP';
-    if (symbol.includes('.SA')) return 'BR';
-    
-    // Default to US for symbols without suffixes
-    return 'US';
-  };
-
-  const validateStockSymbol = async (symbol, market) => {
+  // Copy message to clipboard
+  const copyMessage = useCallback(async (messageId, content) => {
     try {
-      // Try to get stock info to validate the symbol exists
-      const stockInfo = await stockAPI.getStockInfo(symbol, market);
-      return stockInfo && stockInfo.symbol;
+      await navigator.clipboard.writeText(content);
+      setCopiedMessageId(messageId);
+      toast.success('Message copied to clipboard');
+      setTimeout(() => setCopiedMessageId(null), 2000);
     } catch (error) {
-      console.log(`Stock validation failed for ${symbol} in ${market}:`, error.message);
-      return null;
+      console.error('Failed to copy message:', error);
+      toast.error('Failed to copy message');
     }
-  };
+  }, []);
 
-  const extractDate = (message) => {
-    // Look for various date patterns
-    const patterns = [
-      /(?:on\s+)?(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\s+(?:the\s+)?(\d{1,2})(?:st|nd|rd|th)?\s+(january|february|march|april|may|june|july|august|september|october|november|december)\s+(\d{4})/i,
-      /(?:on\s+)?(january|february|march|april|may|june|july|august|september|october|november|december)\s+(\d{1,2})(?:st|nd|rd|th)?\s+(?:,\s+)?(\d{4})/i,
-      /(?:on\s+)?(\d{1,2})\/(\d{1,2})\/(\d{4})/,
-      /(?:on\s+)?(\d{1,2})-(\d{1,2})-(\d{4})/,
-      /(?:on\s+)?(monday|tuesday|wednesday|thursday|friday|saturday|sunday)/i,
-      /(?:on\s+)?(tomorrow|today|next\s+week)/i
-    ];
+  // Regenerate response
+  const regenerateResponse = useCallback(async (messageId) => {
+    const messageIndex = messages.findIndex(m => m.id === messageId);
+    if (messageIndex === -1) return;
+    
+    const userMessage = messages[messageIndex - 1];
+    if (!userMessage) return;
+    
+    // Remove the assistant message
+    const newMessages = messages.slice(0, messageIndex);
+    setMessages(newMessages);
+    
+    // Generate new response
+    await handleSendMessage(userMessage.content, newMessages);
+  }, [messages]);
 
-    for (const pattern of patterns) {
-      const match = message.match(pattern);
-      if (match) {
-        if (match[1] && match[2] && match[3] && match[4]) {
-          // Full date with day name: "Monday 4 August 2025"
-          const dayName = match[1].toLowerCase();
-          const day = parseInt(match[2]);
-          const monthName = match[3].toLowerCase();
-          const year = parseInt(match[4]);
-          
-          const months = {
-            january: 0, february: 1, march: 2, april: 3, may: 4, june: 5,
-            july: 6, august: 7, september: 8, october: 9, november: 10, december: 11
-          };
-          
-          const month = months[monthName];
-          if (month !== undefined) {
-            const date = new Date(year, month, day);
-            // Verify the day name matches
-            const dayNames = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
-            const actualDayName = dayNames[date.getDay()];
-            if (actualDayName === dayName) {
-              return date;
-            }
+  // Stop generation
+  const stopGeneration = useCallback(() => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
+    setIsLoading(false);
+    setIsTyping(false);
+    setStreamingMessage('');
+  }, []);
+
+  // Simulate streaming response
+  const simulateStreaming = useCallback(async (response, onUpdate) => {
+    const words = response.split(' ');
+    let currentText = '';
+    
+    for (let i = 0; i < words.length; i++) {
+      if (abortControllerRef.current?.signal.aborted) break;
+      
+      currentText += (i > 0 ? ' ' : '') + words[i];
+      onUpdate(currentText);
+      
+      // Simulate typing delay
+      await new Promise(resolve => setTimeout(resolve, 20 + Math.random() * 30));
+    }
+    
+    return currentText;
+  }, []);
+
+  // Handle sending message
+  const handleSendMessage = useCallback(async (messageContent = inputMessage, currentMessages = messages) => {
+    if (!messageContent.trim()) return;
+
+    const userMessage = {
+      id: Date.now().toString(),
+      type: 'user',
+      content: messageContent,
+      timestamp: new Date(),
+    };
+
+    const newMessages = [...currentMessages, userMessage];
+    setMessages(newMessages);
+    setInputMessage('');
+    setIsLoading(true);
+    setIsTyping(true);
+    setStreamingMessage('');
+
+    // Create abort controller for cancellation
+    abortControllerRef.current = new AbortController();
+
+    try {
+      let response = '';
+      const query = messageContent.toLowerCase();
+
+      // Enhanced API routing based on message content
+      if (query.includes('price') || query.includes('stock') || query.includes('market') || query.includes('quote')) {
+        const symbol = extractSymbol(messageContent);
+        if (symbol) {
+          try {
+            const stockData = await stockAPI.getStockData(symbol, '1d', currentMarket);
+            response = formatStockResponse(stockData, symbol);
+          } catch (error) {
+            console.error('Stock data error:', error);
+            response = `I apologize, but I couldn't fetch stock data for ${symbol} at the moment. This could be due to:
+
+- Invalid stock symbol
+- Market is closed
+- Temporary service issues
+
+Please try again with a valid stock symbol like AAPL, MSFT, or GOOGL.`;
           }
-        } else if (match[1] && match[2] && match[3]) {
-          // Date without day name: "August 4, 2025" or "4/8/2025"
-          const month = match[1].toLowerCase();
-          const day = parseInt(match[2]);
-          const year = parseInt(match[3]);
-          
-          if (isNaN(month)) {
-            // Numeric month
-            return new Date(year, month - 1, day);
-          } else {
-            // Month name
-            const months = {
-              january: 0, february: 1, march: 2, april: 3, may: 4, june: 5,
-              july: 6, august: 7, september: 8, october: 9, november: 10, december: 11
-            };
-            const monthIndex = months[month];
-            if (monthIndex !== undefined) {
-              return new Date(year, monthIndex, day);
-            }
+        } else {
+          response = `I can help you get stock prices and market data. Please specify a stock symbol like AAPL, MSFT, or GOOGL.
+
+**Available Commands:**
+- "What's the price of AAPL?"
+- "Show me MSFT stock data"
+- "Get market data for GOOGL"`;
+        }
+      } else if (query.includes('predict') || query.includes('forecast') || query.includes('prediction')) {
+        const symbol = extractSymbol(messageContent);
+        if (symbol) {
+          try {
+            const predictionResponse = await predictionAPI.getPrediction(symbol);
+            response = formatPredictionResponse(predictionResponse, symbol);
+          } catch (error) {
+            console.error('Prediction error:', error);
+            response = `I apologize, but I couldn't generate a prediction for ${symbol} at the moment. Please try again with a valid stock symbol.`;
           }
-        } else if (match[1]) {
-          // Day name only or relative date
-          const dayName = match[1].toLowerCase();
-          const today = new Date();
-          
-          if (dayName === 'tomorrow') {
-            return new Date(today.getTime() + 24 * 60 * 60 * 1000);
-          } else if (dayName === 'today') {
-            return today;
-          } else if (dayName === 'next week') {
-            return new Date(today.getTime() + 7 * 24 * 60 * 60 * 1000);
-          } else {
-            // Day name like "monday"
-            const dayNames = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
-            const targetDay = dayNames.indexOf(dayName);
-            if (targetDay !== -1) {
-              const currentDay = today.getDay();
-              let daysToAdd = targetDay - currentDay;
-              if (daysToAdd <= 0) daysToAdd += 7; // Next occurrence
-              return new Date(today.getTime() + daysToAdd * 24 * 60 * 60 * 1000);
-            }
+        } else {
+          response = `I can provide AI-powered stock predictions. Please specify a stock symbol.
+
+**Example requests:**
+- "Predict AAPL direction for tomorrow"
+- "What's the forecast for TSLA?"
+- "Get prediction for MSFT stock"`;
+        }
+      } else if (query.includes('day trading') || query.includes('trading strategy') || query.includes('trade')) {
+        const symbol = extractSymbol(messageContent);
+        if (symbol) {
+          try {
+            const tradingResponse = await dayTradingAPI.getDayTradingPrediction(symbol, 'today');
+            response = formatTradingResponse(tradingResponse, symbol);
+          } catch (error) {
+            console.error('Trading analysis error:', error);
+            response = `I apologize, but I couldn't analyze trading opportunities for ${symbol} at the moment. Please try again with a valid stock symbol.`;
           }
+        } else {
+          response = `I can analyze day trading opportunities and strategies. Please specify a stock symbol.
+
+**Example requests:**
+- "Day trading strategy for MSFT"
+- "Trading analysis for AAPL"
+- "Get trade signals for TSLA"`;
+        }
+      } else if (query.includes('portfolio') || query.includes('holdings') || query.includes('investment')) {
+        response = `I can help you analyze your portfolio and investment strategies.
+
+**Portfolio Features:**
+- Portfolio performance analysis
+- Risk assessment
+- Diversification recommendations
+- Asset allocation suggestions
+
+**Example requests:**
+- "Analyze my portfolio performance"
+- "What's my portfolio risk level?"
+- "Suggest portfolio rebalancing"`;
+      } else if (query.includes('market') && (query.includes('analysis') || query.includes('overview') || query.includes('trend'))) {
+        response = `I can provide comprehensive market analysis and insights.
+
+**Market Analysis Features:**
+- Sector performance analysis
+- Market trend identification
+- Economic indicators review
+- Market sentiment analysis
+
+**Example requests:**
+- "Analyze tech sector performance"
+- "What are the current market trends?"
+- "Get market sentiment analysis"`;
+      } else {
+        // General market mate response
+        try {
+          const marketResponse = await marketMateAPI.query(messageContent);
+          response = marketResponse.message || generateDefaultResponse(messageContent);
+        } catch (error) {
+          response = generateDefaultResponse(messageContent);
+        }
+      }
+
+      // Simulate streaming response
+      await simulateStreaming(response, (streamedText) => {
+        setStreamingMessage(streamedText);
+      });
+
+      const assistantMessage = {
+        id: (Date.now() + 1).toString(),
+        type: 'assistant',
+        content: response,
+        timestamp: new Date(),
+        model: selectedModel,
+        temperature,
+        maxTokens
+      };
+
+      const updatedMessages = [...newMessages, assistantMessage];
+      setMessages(updatedMessages);
+      setStreamingMessage('');
+
+      // Update chat history
+      const updatedHistory = chatHistory.map(chat => 
+        chat.id === currentChatId 
+          ? { 
+              ...chat, 
+              messages: updatedMessages,
+              title: chat.title === 'New Chat' ? generateChatTitle(messageContent) : chat.title,
+              model: selectedModel,
+              temperature,
+              maxTokens
+            }
+          : chat
+      );
+      setChatHistory(updatedHistory);
+      saveChatHistory(updatedHistory);
+
+    } catch (error) {
+      if (error.name === 'AbortError') {
+        console.log('Request aborted');
+        return;
+      }
+      
+      console.error('Error sending message:', error);
+      const errorMessage = {
+        id: (Date.now() + 1).toString(),
+        type: 'assistant',
+        content: `I apologize, but I encountered an error while processing your request. Please try again or rephrase your question.
+
+**Error Details:** ${error.message}
+
+**Troubleshooting Tips:**
+- Check your internet connection
+- Try rephrasing your question
+- Make sure you're using valid stock symbols
+- Contact support if the issue persists`,
+        timestamp: new Date(),
+        isError: true
+      };
+
+      const errorMessages = [...newMessages, errorMessage];
+      setMessages(errorMessages);
+
+      // Update chat history with error
+      const updatedHistory = chatHistory.map(chat => 
+        chat.id === currentChatId 
+          ? { ...chat, messages: errorMessages }
+          : chat
+      );
+      setChatHistory(updatedHistory);
+      saveChatHistory(updatedHistory);
+      
+      toast.error('Failed to process request');
+    } finally {
+      setIsLoading(false);
+      setIsTyping(false);
+      abortControllerRef.current = null;
+    }
+  }, [inputMessage, messages, currentChatId, chatHistory, selectedModel, temperature, maxTokens, currentMarket, saveChatHistory, simulateStreaming]);
+
+  // Helper functions
+  const extractSymbol = (text) => {
+    const symbolRegex = /\b[A-Z]{1,5}\b/g;
+    const matches = text.match(symbolRegex);
+    if (matches) {
+      // Enhanced filtering to exclude common words and invalid symbols
+      const commonWords = [
+        'THE', 'AND', 'FOR', 'ARE', 'BUT', 'NOT', 'YOU', 'ALL', 'CAN', 'HER', 'WAS', 'ONE', 'OUR', 'HAD', 'BY', 'WORD', 'WHAT', 'SOME', 'WE', 'IT', 'IS', 'OR', 'HAVE', 'AS', 'BE', 'IN', 'ON', 'AT', 'TO', 'OF', 'A', 'I',
+        // Country/region codes that are not stock symbols
+        'US', 'UK', 'CA', 'AU', 'EU', 'JP', 'CN', 'IN', 'BR', 'MX', 'DE', 'FR', 'IT', 'ES', 'NL', 'SE', 'NO', 'DK', 'FI', 'CH', 'AT', 'BE', 'IE', 'PT', 'GR', 'PL', 'CZ', 'HU', 'RO', 'BG', 'HR', 'SI', 'SK', 'LT', 'LV', 'EE', 'CY', 'MT', 'LU',
+        // Common abbreviations that are not stock symbols
+        'CEO', 'CFO', 'CTO', 'COO', 'VP', 'GM', 'PM', 'HR', 'IT', 'AI', 'ML', 'DL', 'API', 'URL', 'PDF', 'JPG', 'PNG', 'GIF', 'MP3', 'MP4', 'AVI', 'MOV', 'ZIP', 'RAR', 'TXT', 'DOC', 'XLS', 'PPT', 'CSV', 'JSON', 'XML', 'HTML', 'CSS', 'JS', 'PHP', 'SQL', 'DB', 'ID', 'OK', 'NO', 'YES', 'NEW', 'OLD', 'BIG', 'SMALL', 'HIGH', 'LOW', 'UP', 'DOWN', 'LEFT', 'RIGHT', 'TOP', 'BOTTOM', 'FRONT', 'BACK', 'SIDE', 'CENTER', 'MIDDLE', 'START', 'END', 'BEGIN', 'FINISH', 'STOP', 'GO', 'RUN', 'WALK', 'SIT', 'STAND', 'LIE', 'SLEEP', 'WAKE', 'EAT', 'DRINK', 'READ', 'WRITE', 'TALK', 'LISTEN', 'SEE', 'LOOK', 'WATCH', 'HEAR', 'FEEL', 'TOUCH', 'HOLD', 'GRAB', 'PUSH', 'PULL', 'OPEN', 'CLOSE', 'LOCK', 'UNLOCK', 'TURN', 'MOVE', 'STAY', 'COME', 'GO', 'LEAVE', 'ENTER', 'EXIT', 'ARRIVE', 'DEPART', 'RETURN', 'COME', 'BACK', 'AGAIN', 'ONCE', 'TWICE', 'THREE', 'FOUR', 'FIVE', 'SIX', 'SEVEN', 'EIGHT', 'NINE', 'TEN', 'HUNDRED', 'THOUSAND', 'MILLION', 'BILLION', 'TRILLION'
+      ];
+      
+      // Find the first valid symbol that's not in common words
+      const validSymbol = matches.find(match => !commonWords.includes(match));
+      
+      // Additional validation: ensure it looks like a real stock symbol
+      if (validSymbol && validSymbol.length >= 2 && validSymbol.length <= 5) {
+        // Check if it's likely a real stock symbol (contains at least one letter)
+        if (/[A-Z]/.test(validSymbol)) {
+          return validSymbol;
         }
       }
     }
     return null;
   };
 
-  const generateSpecificResponse = async (message, symbol, targetDate, detectedMarket = 'US') => {
-    try {
-      let response = '';
-      
-      // Enhanced Natural Language Query Detection
-      const isRankingQuery = /(?:top|best|worst|leading)\s+\d+\s+(loser|gainer|stock|performer)/i.test(message);
-      
-      // Natural Language Startup/Tech Queries - Multiple patterns
-      const isStartupQuery = /(?:give\s+(?:me|list\s+of)|show\s+me|get\s+me|find\s+me|what\s+are|tell\s+me\s+about|can\s+you\s+(?:give|show|get|find))\s+(?:the\s+)?(?:top|best|leading)\s+\d+\s+(?:ai\s+)?(?:tech|startup|start\s+up)/i.test(message);
-      const isTopStartupQuery = /(?:top|best|leading)\s+\d+\s+(?:ai\s+)?(?:tech|startup|start\s+up)/i.test(message);
-      
-      // Enhanced List queries with natural language
-      const isListQuery = /(?:list|show|give|get)\s+(?:me\s+)?(?:the\s+)?\d+\s+(?:ai\s+)?(?:tech|startup|stock|company|performer)/i.test(message);
-      const isGeneralListQuery = /(?:list|show|give|get).*(?:stock|company|tech|startup)/i.test(message);
-      
-      // Check if this is an investment recommendation query
-      const isInvestmentQuery = /investment|portfolio|recommend|suggest|buy|sell/i.test(message);
-      
-      // Check if this is a market analysis query
-      const isMarketAnalysisQuery = /market\s+(outlook|analysis|trends|sentiment|insights)/i.test(message);
-      
-      // Check if this is a sector analysis query
-      const isSectorAnalysisQuery = /(tech|financial|healthcare|energy|retail|biotech)\s+sector/i.test(message);
-      
-      // Check if this is a technical analysis query
-      const isTechnicalAnalysisQuery = /(rsi|macd|bollinger|moving\s+average|stochastic|atr|support|resistance|technical)/i.test(message);
-      
-      // Check if this is a currency/forex query
-      const isCurrencyQuery = /(currency|forex|exchange\s+rate|usd|eur|gbp|jpy)/i.test(message);
-      
-      // Check if this is a news/event query
-      const isNewsQuery = /(news|earnings|fed|inflation|economic|event)/i.test(message);
-      
-      // Check if this is a comparison query
-      const isComparisonQuery = /(compare|vs|versus|difference\s+between)/i.test(message);
-      
-      // Check if this is a scenario analysis query
-      const isScenarioQuery = /(what\s+if|scenario|stress\s+test|worst\s+case|best\s+case)/i.test(message);
-      
-      // Check if this is a fundamental analysis query
-      const isFundamentalQuery = /(p\/e|earnings|revenue|debt|cash\s+flow|fundamental)/i.test(message);
-      
-      // Check if this is a valuation query
-      const isValuationQuery = /(overvalued|undervalued|fair\s+value|intrinsic|valuation)/i.test(message);
-      
-      // Check if this is a historical analysis query
-      const isHistoricalQuery = /(historical|performance|return|price\s+history)/i.test(message);
-      
-      // Check if this is a statistical analysis query
-      const isStatisticalQuery = /(volatility|correlation|beta|sharpe|risk\s+metrics|statistical)/i.test(message);
-      
-      if (isInvestmentQuery && !symbol) {
-        // Generate investment recommendations based on user settings
-        const marketInfo = stockAPI.getMarketInfo(detectedMarket);
-        const { investmentSettings } = useStore.getState();
-        
-        const recommendedStocks = stockAPI.getMarketSymbols(detectedMarket).slice(0, 5);
-        const riskBasedRecommendations = {
-          conservative: ['Bonds', 'Dividend stocks', 'Blue-chip companies', 'Index funds'],
-          moderate: ['Growth stocks', 'Sector ETFs', 'Mid-cap companies', 'International exposure'],
-          aggressive: ['Tech stocks', 'Small-cap growth', 'Emerging markets', 'Options trading']
-        };
-        
-        response = `# 💼 **Investment Recommendations - ${marketInfo.name} Market**
-
-## 🎯 **Based on Your Profile**
-- **Risk Tolerance**: ${investmentSettings.riskTolerance.charAt(0).toUpperCase() + investmentSettings.riskTolerance.slice(1)}
-- **Investment Amount**: ${marketInfo.currency}${investmentSettings.investmentAmount.toLocaleString()}
-- **Preferred Currencies**: ${investmentSettings.preferredCurrencies.join(', ')}
-- **Stop Loss**: ${investmentSettings.stopLossPercentage}% | Take Profit: ${investmentSettings.takeProfitPercentage}%
-
-## 📈 **Recommended Stocks for ${marketInfo.name}**
-| Symbol | Company | Risk Level | Expected Return | Confidence |
-|--------|---------|------------|-----------------|------------|
-${recommendedStocks.map((stock, index) => {
-  const risk = investmentSettings.riskTolerance === 'conservative' ? 'Low' : 
-               investmentSettings.riskTolerance === 'moderate' ? 'Medium' : 'High';
-  const expectedReturn = (Math.random() * 15 + 5).toFixed(1);
-  const confidence = (Math.random() * 20 + 75).toFixed(0);
-  return `| ${stock} | ${stock} Inc. | ${risk} | +${expectedReturn}% | ${confidence}% |`;
-}).join('\n')}
-
-## 💡 **Strategy Recommendations**
-**For ${investmentSettings.riskTolerance} investors:**
-
-${riskBasedRecommendations[investmentSettings.riskTolerance].map(rec => `- ${rec}`).join('\n')}
-
-## 🎯 **Portfolio Allocation**
-- **Stocks**: ${investmentSettings.riskTolerance === 'conservative' ? '60%' : investmentSettings.riskTolerance === 'moderate' ? '70%' : '80%'}
-- **Bonds**: ${investmentSettings.riskTolerance === 'conservative' ? '30%' : investmentSettings.riskTolerance === 'moderate' ? '20%' : '10%'}
-- **Cash**: ${investmentSettings.riskTolerance === 'conservative' ? '10%' : investmentSettings.riskTolerance === 'moderate' ? '10%' : '10%'}
-
-## ⚠️ **Risk Management**
-- **Max Position Size**: ${investmentSettings.maxPositionSize}% of portfolio
-- **Diversification Target**: ${investmentSettings.diversificationTarget} different assets
-- **Auto Rebalancing**: ${investmentSettings.autoRebalance ? 'Enabled' : 'Disabled'}
-
-## 🌍 **Market-Specific Insights**
-- **Currency**: ${marketInfo.currency}
-- **Exchanges**: ${marketInfo.exchanges.join(', ')}
-- **Market Hours**: ${marketInfo.name === 'US' ? '9:30 AM - 4:00 PM EST' : 'Varies by exchange'}
-
-*These recommendations are based on your ${investmentSettings.riskTolerance} risk profile and ${marketInfo.name} market conditions. Always do your own research before investing.*`;
-        
-      } else if (isRankingQuery) {
-        // Handle ranking queries
-        const rankingMatch = message.match(/top\s+(\d+)\s+(loser|gainer|stock|performer)/i);
-        const count = parseInt(rankingMatch[1]) || 10;
-        const type = rankingMatch[2].toLowerCase();
-        
-        // Use the extracted date or default to today
-        const targetDate = extractDate(message) || new Date();
-        const dateStr = targetDate.toLocaleDateString('en-US', { 
-          weekday: 'long', 
-          year: 'numeric', 
-          month: 'long', 
-          day: 'numeric' 
-        });
-        
-        const marketInfo = stockAPI.getMarketInfo(currentMarket);
-        
-        // Generate mock ranking data
-        const stocks = stockAPI.getMarketSymbols(currentMarket);
-        const rankingData = stocks.slice(0, count).map((stock, index) => ({
-          symbol: stock.replace(marketInfo.suffix, ''),
-          name: `${stock.replace(marketInfo.suffix, '')} Inc.`,
-          price: (Math.random() * 200 + 10).toFixed(2),
-          change: type === 'loser' ? -(Math.random() * 15 + 5) : (Math.random() * 15 + 5),
-          changePercent: type === 'loser' ? -(Math.random() * 20 + 10) : (Math.random() * 20 + 10),
-          volume: (Math.random() * 100 + 10).toFixed(1)
-        }));
-        
-        // Sort by change percentage
-        rankingData.sort((a, b) => type === 'loser' ? a.changePercent - b.changePercent : b.changePercent - a.changePercent);
-        
-        response = `# 📊 **Top ${count} ${type.charAt(0).toUpperCase() + type.slice(1)}s for ${dateStr} - ${marketInfo.name}**
-
-## 🎯 **Market Overview**
-Based on technical analysis and market sentiment, here are the predicted ${type}s for ${dateStr} in the ${marketInfo.name} market (${marketInfo.currency}):
-
-## 📈 **Ranking Table**
-| Rank | Symbol | Company | Current Price | Change | Change % | Volume (M) |
-|------|--------|---------|---------------|--------|----------|------------|
-${rankingData.map((stock, index) => 
-  `| ${index + 1} | **${stock.symbol}** | ${stock.name} | ${marketInfo.currency}${stock.price} | ${stock.change > 0 ? '+' : ''}${stock.change.toFixed(2)} | ${stock.changePercent > 0 ? '+' : ''}${stock.changePercent.toFixed(2)}% | ${stock.volume} |`
-).join('\n')}
-
-## 💡 **Key Insights**
-- **Market**: ${marketInfo.name} (${marketInfo.currency})
-- **Market Sentiment**: ${type === 'loser' ? 'Bearish' : 'Bullish'} for the overall market
-- **Volatility**: Expected to be ${type === 'loser' ? 'high' : 'moderate'} during trading hours
-- **Volume**: Above average volume expected for these stocks
-- **Confidence Level**: 85%
-
-## ⚠️ **Risk Factors**
-- Market volatility and economic conditions
-- Earnings announcements and news events
-- Technical resistance/support levels
-- Sector-specific trends
-- Currency fluctuations (${marketInfo.currency})
-
-*This analysis is based on technical indicators and market sentiment analysis with 85% confidence for the ${marketInfo.name} market.*`;
-        
-      } else if (isStartupQuery || isTopStartupQuery) {
-        // Handle natural language startup/tech queries
-        const startupMatch = message.match(/(?:give\s+(?:me|list\s+of)|show\s+me|get\s+me|find\s+me|what\s+are|tell\s+me\s+about|can\s+you\s+(?:give|show|get|find))\s+(?:the\s+)?(?:top|best|leading)\s+(\d+)\s+(?:ai\s+)?(tech|startup|start\s+up)/i) ||
-                          message.match(/(?:top|best|leading)\s+(\d+)\s+(?:ai\s+)?(tech|startup|start\s+up)/i);
-        const count = parseInt(startupMatch?.[1]) || 10;
-        const type = startupMatch?.[2]?.toLowerCase() || 'tech';
-        
-        // Generate focused tech startup response
-        const marketInfo = stockAPI.getMarketInfo(currentMarket);
-        
-        // Define focused tech startup stocks (more startup-like companies)
-        const techStartupStocks = {
-          US: ['NVDA', 'AMD', 'PLTR', 'CRWD', 'SNOW', 'NET', 'DDOG', 'ZS', 'OKTA', 'TEAM', 'ZM', 'SQ', 'ROKU', 'SPOT', 'UBER', 'LYFT', 'SNAP', 'PINS', 'TWLO', 'MDB'],
-          UK: ['ARM', 'SAGE', 'AVV', 'RMG', 'BARC', 'HSBA', 'VOD', 'BT', 'SKY', 'ITV'],
-          CA: ['SHOP', 'CNR', 'CP', 'CNQ', 'SU', 'ABX', 'RY', 'TD', 'BNS', 'CM'],
-          AU: ['CSL', 'CBA', 'NAB', 'ANZ', 'WBC', 'BHP', 'RIO', 'WES', 'WOW', 'TLS'],
-          DE: ['SAP', 'SIE', 'BMW', 'DAI', 'VOW', 'BAYN', 'BAS', 'DTE', 'EOAN', 'RWE'],
-          JP: ['7203', '6758', '9984', '6861', '6954', '7974', '8306', '9433', '9432', '9434'],
-          IN: ['RELIANCE', 'TCS', 'INFY', 'HDFC', 'ICICIBANK', 'HINDUNILVR', 'ITC', 'SBIN', 'BHARTIARTL', 'KOTAKBANK'],
-          BR: ['VALE', 'PETR4', 'ITUB4', 'BBDC4', 'ABEV3', 'WEGE3', 'RENT3', 'LREN3', 'MGLU3', 'JBSS3']
-        };
-        
-        // Get appropriate stock list based on type and market
-        let stockList = [];
-        if (type === 'tech' || type === 'startup') {
-          stockList = techStartupStocks[currentMarket] || techStartupStocks.US;
-        } else {
-          stockList = stockAPI.getMarketSymbols(currentMarket);
-        }
-        
-        // Generate list data
-        const listData = stockList.slice(0, count).map((stock, index) => ({
-          symbol: stock.replace(marketInfo.suffix, ''),
-          name: `${stock.replace(marketInfo.suffix, '')} Inc.`,
-          price: (Math.random() * 200 + 10).toFixed(2),
-          change: (Math.random() * 30 - 15),
-          changePercent: (Math.random() * 40 - 20),
-          volume: (Math.random() * 100 + 10).toFixed(1),
-          marketCap: (Math.random() * 500 + 50).toFixed(1),
-          sector: type === 'tech' || type === 'startup' ? 'Technology' : 'Various'
-        }));
-        
-        // Sort by market cap for tech/startup lists
-        listData.sort((a, b) => parseFloat(b.marketCap) - parseFloat(a.marketCap));
-        
-        const listTitle = type === 'tech' ? 'Tech Companies' : 
-                         type === 'startup' ? 'Startup Stocks' : 
-                         'Tech Companies';
-        
-        response = `# 🚀 **Top ${count} ${listTitle} - ${marketInfo.name} Market**
-
-## 🎯 **Natural Language Query Response**
-You asked: **"${message}"** - Here are the top ${count} ${listTitle.toLowerCase()} in the ${marketInfo.name} market (${marketInfo.currency}):
-
-## 📈 **${listTitle}**
-| Rank | Symbol | Company | Current Price | Change | Change % | Volume (M) | Market Cap (B) |
-|------|--------|---------|---------------|--------|----------|------------|----------------|
-${listData.map((stock, index) => 
-  `| ${index + 1} | **${stock.symbol}** | ${stock.name} | ${marketInfo.currency}${stock.price} | ${stock.change > 0 ? '+' : ''}${stock.change.toFixed(2)} | ${stock.changePercent > 0 ? '+' : ''}${stock.changePercent.toFixed(2)}% | ${stock.volume} | ${stock.marketCap} |
-`
-).join('\n')}
-
-## 💡 **Key Insights**
-- **Market**: ${marketInfo.name} (${marketInfo.currency})
-- **Sector Focus**: AI & Technology
-- **Total Market Cap**: ${marketInfo.currency}${(listData.reduce((sum, stock) => sum + parseFloat(stock.marketCap), 0)).toFixed(1)}B
-- **Average Change**: ${(listData.reduce((sum, stock) => sum + stock.changePercent, 0) / listData.length).toFixed(2)}%
-
-## 🚀 **Notable AI Tech Performers**
-- **Top Gainer**: ${listData[0].symbol} (+${listData[0].changePercent.toFixed(2)}%)
-- **Highest Volume**: ${listData.sort((a, b) => parseFloat(b.volume) - parseFloat(a.volume))[0].symbol} (${listData.sort((a, b) => parseFloat(b.volume) - parseFloat(a.volume))[0].volume}M)
-- **Largest Market Cap**: ${listData[0].symbol} (${marketInfo.currency}${listData[0].marketCap}B)
-
-## ⚠️ **Investment Considerations**
-- AI and technology sector volatility
-- Innovation and R&D investments
-- Regulatory changes affecting AI companies
-- Currency fluctuations (${marketInfo.currency})
-- Market sentiment towards tech stocks
-
-*This response was generated using natural language processing for your query: "${message}"*`;
-        
-      } else if (isListQuery || isGeneralListQuery) {
-        // Handle list queries (tech startups, stocks, etc.)
-        const listMatch = message.match(/list\s+(\d+)\s+(tech|startup|stock|company|performer)/i);
-        const count = parseInt(listMatch?.[1]) || 10;
-        const type = listMatch?.[2]?.toLowerCase() || 'stock';
-        
-        const marketInfo = stockAPI.getMarketInfo(currentMarket);
-        
-        // Define tech startup stocks for different markets
-        const techStartupStocks = {
-          US: ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'TSLA', 'META', 'NVDA', 'NFLX', 'ADBE', 'CRM', 'ORCL', 'INTC', 'AMD', 'PYPL', 'V', 'MA', 'ADP', 'INTU', 'MU', 'QCOM'],
-          UK: ['ARM', 'SAGE', 'AVV', 'RMG', 'BARC', 'HSBA', 'VOD', 'BT', 'SKY', 'ITV'],
-          CA: ['SHOP', 'CNR', 'CP', 'CNQ', 'SU', 'ABX', 'RY', 'TD', 'BNS', 'CM'],
-          AU: ['CSL', 'CBA', 'NAB', 'ANZ', 'WBC', 'BHP', 'RIO', 'WES', 'WOW', 'TLS'],
-          DE: ['SAP', 'SIE', 'BMW', 'DAI', 'VOW', 'BAYN', 'BAS', 'DTE', 'EOAN', 'RWE'],
-          JP: ['7203', '6758', '9984', '6861', '6954', '7974', '8306', '9433', '9432', '9434'],
-          IN: ['RELIANCE', 'TCS', 'INFY', 'HDFC', 'ICICIBANK', 'HINDUNILVR', 'ITC', 'SBIN', 'BHARTIARTL', 'KOTAKBANK'],
-          BR: ['VALE', 'PETR4', 'ITUB4', 'BBDC4', 'ABEV3', 'WEGE3', 'RENT3', 'LREN3', 'MGLU3', 'JBSS3']
-        };
-        
-        // Get appropriate stock list based on type and market
-        let stockList = [];
-        if (type === 'tech' || type === 'startup') {
-          stockList = techStartupStocks[detectedMarket] || techStartupStocks.US;
-        } else {
-          stockList = stockAPI.getMarketSymbols(detectedMarket);
-        }
-        
-        // Generate list data
-        const listData = stockList.slice(0, count).map((stock, index) => ({
-          symbol: stock.replace(marketInfo.suffix, ''),
-          name: `${stock.replace(marketInfo.suffix, '')} Inc.`,
-          price: (Math.random() * 200 + 10).toFixed(2),
-          change: (Math.random() * 30 - 15),
-          changePercent: (Math.random() * 40 - 20),
-          volume: (Math.random() * 100 + 10).toFixed(1),
-          marketCap: (Math.random() * 500 + 50).toFixed(1),
-          sector: type === 'tech' || type === 'startup' ? 'Technology' : 'Various'
-        }));
-        
-        // Sort by market cap for tech/startup lists, by change for others
-        if (type === 'tech' || type === 'startup') {
-          listData.sort((a, b) => parseFloat(b.marketCap) - parseFloat(a.marketCap));
-        } else {
-          listData.sort((a, b) => b.changePercent - a.changePercent);
-        }
-        
-        const listTitle = type === 'tech' ? 'Tech Companies' : 
-                         type === 'startup' ? 'Tech Startups' : 
-                         'Stocks';
-        
-        response = `# 📊 **Top ${count} ${listTitle} - ${marketInfo.name} Market**
-
-## 🎯 **Market Overview**
-Here are the top ${count} ${listTitle.toLowerCase()} in the ${marketInfo.name} market (${marketInfo.currency}) based on market capitalization and performance:
-
-## 📈 **Stock List**
-| Rank | Symbol | Company | Current Price | Change | Change % | Volume (M) | Market Cap (B) |
-|------|--------|---------|---------------|--------|----------|------------|----------------|
-${listData.map((stock, index) => 
-  `| ${index + 1} | **${stock.symbol}** | ${stock.name} | ${marketInfo.currency}${stock.price} | ${stock.change > 0 ? '+' : ''}${stock.change.toFixed(2)} | ${stock.changePercent > 0 ? '+' : ''}${stock.changePercent.toFixed(2)}% | ${stock.volume} | ${stock.marketCap} |
-`
-).join('\n')}
-
-## 💡 **Key Insights**
-- **Market**: ${marketInfo.name} (${marketInfo.currency})
-- **Sector Focus**: ${type === 'tech' || type === 'startup' ? 'Technology' : 'Diversified'}
-- **Total Market Cap**: ${marketInfo.currency}${(listData.reduce((sum, stock) => sum + parseFloat(stock.marketCap), 0)).toFixed(1)}B
-- **Average Change**: ${(listData.reduce((sum, stock) => sum + stock.changePercent, 0) / listData.length).toFixed(2)}%
-
-## 🚀 **Notable Performers**
-- **Top Gainer**: ${listData[0].symbol} (+${listData[0].changePercent.toFixed(2)}%)
-- **Highest Volume**: ${listData.sort((a, b) => parseFloat(b.volume) - parseFloat(a.volume))[0].symbol} (${listData.sort((a, b) => parseFloat(b.volume) - parseFloat(a.volume))[0].volume}M)
-- **Largest Market Cap**: ${listData[0].symbol} (${marketInfo.currency}${listData[0].marketCap}B)
-
-## ⚠️ **Investment Considerations**
-- Market volatility and sector-specific trends
-- Earnings announcements and news events
-- Technical resistance/support levels
-- Currency fluctuations (${marketInfo.currency})
-- Regulatory changes affecting ${type === 'tech' || type === 'startup' ? 'technology' : 'various'} sectors
-
-*This list is based on current market data and performance metrics for the ${marketInfo.name} market.*`;
-        
-      } else if (symbol && targetDate) {
-        // Day trading prediction with error handling
-        try {
-          const dayTradingData = await dayTradingAPI.getDayTradingPrediction(symbol, targetDate);
-          const stockInfo = await stockAPI.getStockInfo(symbol, detectedMarket);
-          const marketInfo = stockAPI.getMarketInfo(detectedMarket);
-          
-          response = `# 📈 **${symbol} Day Trading Prediction for ${new Date(targetDate).toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })} - ${marketInfo.name}**
-
-## 🎯 **Current Status**
-- **Current Price**: ${marketInfo.currency}${stockInfo.current_price?.toFixed(2) || 'N/A'}
-- **Market**: ${marketInfo.name} (${marketInfo.currency})
-- **Market Cap**: ${marketInfo.currency}${(stockInfo.market_cap / 1e9).toFixed(1)}B
-- **Volume**: ${(stockInfo.volume / 1e6).toFixed(1)}M
-
-## 📊 **Intraday Predictions**
-| Time Period | Expected Range | Target Price |
-|-------------|----------------|--------------|
-| **Open** | ${marketInfo.currency}${dayTradingData.intraday_predictions.open.min.toFixed(2)} - ${marketInfo.currency}${dayTradingData.intraday_predictions.open.max.toFixed(2)} | ${marketInfo.currency}${dayTradingData.intraday_predictions.open.expected.toFixed(2)} |
-| **Close** | ${marketInfo.currency}${dayTradingData.intraday_predictions.close.min.toFixed(2)} - ${marketInfo.currency}${dayTradingData.intraday_predictions.close.max.toFixed(2)} | ${marketInfo.currency}${dayTradingData.intraday_predictions.close.expected.toFixed(2)} |
-
-## 🎯 **Trading Signals**
-- **Overall Sentiment**: ${dayTradingData.sentiment.overall}
-- **Confidence Level**: ${dayTradingData.sentiment.confidence}%
-- **Market**: ${marketInfo.name}
-
-## 📍 **Technical Levels**
-- **Support Levels**: ${marketInfo.currency}${dayTradingData.technical_levels.support[0].toFixed(2)}, ${marketInfo.currency}${dayTradingData.technical_levels.support[1].toFixed(2)}
-- **Resistance Levels**: ${marketInfo.currency}${dayTradingData.technical_levels.resistance[0].toFixed(2)}, ${marketInfo.currency}${dayTradingData.technical_levels.resistance[1].toFixed(2)}
-- **Pivot Point**: ${marketInfo.currency}${dayTradingData.technical_levels.pivot.toFixed(2)}
-
-## ⚠️ **Risk Factors**
-${dayTradingData.sentiment.factors.map(factor => `- ${factor}`).join('\n')}
-- Currency risk (${marketInfo.currency})
-
-## 💡 **Trading Strategy**
-Based on the analysis, I recommend:
-- **Entry Point**: Around ${marketInfo.currency}${dayTradingData.intraday_predictions.open.expected.toFixed(2)}
-- **Target**: ${marketInfo.currency}${dayTradingData.intraday_predictions.close.expected.toFixed(2)}
-- **Stop Loss**: ${marketInfo.currency}${dayTradingData.technical_levels.support[0].toFixed(2)}
-
-*Confidence Level: ${dayTradingData.sentiment.confidence}% - ${marketInfo.name} Market*`;
-        } catch (error) {
-          const marketInfo = stockAPI.getMarketInfo(currentMarket);
-          const availableStocks = stockAPI.getMarketSymbols(currentMarket).slice(0, 5);
-          
-          response = `# ❌ **Error Generating Prediction**
-
-I encountered an error while trying to generate a prediction for **${symbol}** in the ${marketInfo.name} market.
-
-## 🔍 **Possible Reasons:**
-- The stock symbol **${symbol}** might not be available in ${marketInfo.name}
-- Market data might be temporarily unavailable
-- The requested date might be outside trading hours
-
-## 💡 **Please try:**
-- **Checking the stock symbol spelling** - Make sure it's a valid ${marketInfo.name} stock symbol
-- **Using a different date** - Try a date within trading hours
-- **Using a known stock symbol** - Try one of these popular ${marketInfo.name} stocks: ${availableStocks.join(', ')}
-- **Asking for a general market analysis** - I can provide market overview instead
-
-## 📊 **Available ${marketInfo.name} Stocks:**
-${availableStocks.map(stock => `- **${stock}**`).join('\n')}
-
-*Error: ${error.message || 'Request failed with status code 404'}*`;
-        }
-        
-      } else if (symbol) {
-        // General prediction with error handling
-        try {
-          const predictionData = await predictionAPI.getPrediction(symbol);
-          const stockInfo = await stockAPI.getStockInfo(symbol, currentMarket);
-          const marketInfo = stockAPI.getMarketInfo(currentMarket);
-          
-          response = `# 📊 **${symbol} Stock Analysis & Prediction - ${marketInfo.name}**
-
-## 🎯 **Current Status**
-- **Current Price**: ${marketInfo.currency}${stockInfo.current_price?.toFixed(2) || 'N/A'}
-- **Market**: ${marketInfo.name} (${marketInfo.currency})
-- **Market Cap**: ${marketInfo.currency}${(stockInfo.market_cap / 1e9).toFixed(1)}B
-- **Volume**: ${(stockInfo.volume / 1e6).toFixed(1)}M
-
-## 🔮 **AI Prediction**
-**${predictionData.prediction}**
-
-## 📈 **Key Metrics**
-- **Sentiment**: ${predictionData.sentiment}
-- **Confidence**: ${predictionData.confidence}%
-- **Target Price**: ${marketInfo.currency}${predictionData.target_price?.toFixed(2) || 'N/A'}
-- **Stop Loss**: ${marketInfo.currency}${predictionData.stop_loss?.toFixed(2) || 'N/A'}
-
-## 📊 **Technical Indicators**
-- **RSI**: ${predictionData.technical_indicators?.rsi?.toFixed(1) || 'N/A'}
-- **SMA (20)**: ${marketInfo.currency}${predictionData.technical_indicators?.sma_20?.toFixed(2) || 'N/A'}
-- **Volatility**: ${(predictionData.technical_indicators?.volatility * 100)?.toFixed(1) || 'N/A'}%
-- **Price Change**: ${(predictionData.technical_indicators?.price_change_pct || 0).toFixed(2)}%
-
-## 💡 **Trading Recommendation**
-${predictionData.sentiment === 'Bullish' ? 
-  '🟢 **BUY** - The stock shows bullish momentum with positive technical indicators.' :
-  predictionData.sentiment === 'Bearish' ?
-  '🔴 **SELL** - The stock shows bearish signals with negative technical indicators.' :
-  '🟡 **HOLD** - The stock is in a neutral position, wait for clearer signals.'}
-
-*Confidence Level: ${predictionData.confidence}% - ${marketInfo.name} Market*`;
-        } catch (error) {
-          const marketInfo = stockAPI.getMarketInfo(detectedMarket);
-          const availableStocks = stockAPI.getMarketSymbols(detectedMarket).slice(0, 5);
-          
-          response = `# ❌ **Error Generating Prediction**
-
-I encountered an error while trying to generate a prediction for **${symbol}** in the ${marketInfo.name} market.
-
-## 🔍 **Possible Reasons:**
-- The stock symbol **${symbol}** might not be available in ${marketInfo.name}
-- Market data might be temporarily unavailable
-- The requested date might be outside trading hours
-
-## 💡 **Please try:**
-- **Checking the stock symbol spelling** - Make sure it's a valid ${marketInfo.name} stock symbol
-- **Using a different date** - Try a date within trading hours
-- **Using a known stock symbol** - Try one of these popular ${marketInfo.name} stocks: ${availableStocks.join(', ')}
-- **Asking for a general market analysis** - I can provide market overview instead
-
-## 📊 **Available ${marketInfo.name} Stocks:**
-${availableStocks.map(stock => `- **${stock}**`).join('\n')}
-
-*Error: ${error.message || 'Request failed with status code 404'}*`;
-        }
-        
-      } else if (isMarketAnalysisQuery) {
-        // Handle market analysis queries
-        const marketInfo = stockAPI.getMarketInfo(detectedMarket);
-        const stocks = stockAPI.getMarketSymbols(detectedMarket).slice(0, 10);
-        
-        response = `# 📊 **${marketInfo.name} Market Analysis**
-
-## 🎯 **Market Overview**
-Based on current market data and technical analysis, here's the outlook for the ${marketInfo.name} market (${marketInfo.currency}):
-
-## 📈 **Market Performance**
-- **Overall Trend**: ${Math.random() > 0.5 ? 'Bullish' : 'Bearish'}
-- **Market Sentiment**: ${Math.random() > 0.5 ? 'Positive' : 'Cautious'}
-- **Volatility Index**: ${(Math.random() * 30 + 15).toFixed(1)}%
-- **Trading Volume**: ${Math.random() > 0.5 ? 'Above Average' : 'Below Average'}
-
-## 🏆 **Top Performers**
-${stocks.slice(0, 5).map((stock, index) => {
-  const change = (Math.random() * 10 + 2).toFixed(2);
-  return `- **${stock}**: +${change}%`;
-}).join('\n')}
-
-## 📉 **Market Movers**
-${stocks.slice(5, 10).map((stock, index) => {
-  const change = -(Math.random() * 8 + 1).toFixed(2);
-  return `- **${stock}**: ${change}%`;
-}).join('\n')}
-
-## 💡 **Key Insights**
-- **Economic Factors**: ${['Interest rates', 'Inflation data', 'Employment numbers', 'GDP growth'][Math.floor(Math.random() * 4)]} are driving market sentiment
-- **Sector Performance**: ${['Technology', 'Healthcare', 'Financial', 'Energy'][Math.floor(Math.random() * 4)]} sector leading the market
-- **Risk Level**: ${Math.random() > 0.5 ? 'Moderate' : 'High'} - Monitor for potential volatility
-
-## ⚠️ **Risk Factors**
-- Market volatility and economic uncertainty
-- Earnings season impact on individual stocks
-- Global economic conditions affecting ${marketInfo.currency}
-- Regulatory changes and policy announcements
-
-## 🎯 **Trading Recommendations**
-- **Short-term**: ${Math.random() > 0.5 ? 'Cautious approach recommended' : 'Opportunities for selective buying'}
-- **Medium-term**: ${Math.random() > 0.5 ? 'Focus on quality stocks' : 'Diversification is key'}
-- **Long-term**: ${Math.random() > 0.5 ? 'Stay invested with regular rebalancing' : 'Consider defensive positions'}
-
-*This analysis is based on current market conditions and technical indicators for the ${marketInfo.name} market.*`;
-        
-      } else if (isSectorAnalysisQuery) {
-        // Handle sector analysis queries
-        const sectorMatch = message.match(/(tech|financial|healthcare|energy|retail|biotech)\s+sector/i);
-        const sector = sectorMatch ? sectorMatch[1].toLowerCase() : 'tech';
-        const marketInfo = stockAPI.getMarketInfo(currentMarket);
-        
-        const sectorStocks = {
-          tech: ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'TSLA', 'META', 'NVDA', 'NFLX'],
-          financial: ['JPM', 'BAC', 'WFC', 'GS', 'MS', 'C', 'AXP', 'V'],
-          healthcare: ['JNJ', 'PFE', 'UNH', 'ABBV', 'TMO', 'DHR', 'LLY', 'ABT'],
-          energy: ['XOM', 'CVX', 'COP', 'EOG', 'SLB', 'HAL', 'PSX', 'VLO'],
-          retail: ['WMT', 'TGT', 'HD', 'LOW', 'COST', 'TJX', 'MCD', 'SBUX'],
-          biotech: ['AMGN', 'GILD', 'BIIB', 'REGN', 'VRTX', 'ILMN', 'ALGN', 'DXCM']
-        };
-        
-        const stocks = sectorStocks[sector] || sectorStocks.tech;
-        
-        response = `# 🏭 **${sector.charAt(0).toUpperCase() + sector.slice(1)} Sector Analysis - ${marketInfo.name} Market**
-
-## 🎯 **Sector Overview**
-The ${sector} sector in the ${marketInfo.name} market (${marketInfo.currency}) is showing ${Math.random() > 0.5 ? 'strong performance' : 'mixed signals'} with ${Math.random() > 0.5 ? 'positive' : 'cautious'} investor sentiment.
-
-## 📊 **Sector Performance**
-- **Sector Trend**: ${Math.random() > 0.5 ? 'Bullish' : 'Bearish'}
-- **Performance vs Market**: ${Math.random() > 0.5 ? 'Outperforming' : 'Underperforming'} the broader market
-- **Volatility**: ${(Math.random() * 25 + 10).toFixed(1)}% (${Math.random() > 0.5 ? 'Above' : 'Below'} sector average)
-- **Trading Volume**: ${Math.random() > 0.5 ? 'High' : 'Moderate'} activity
-
-## 🏆 **Top ${sector.charAt(0).toUpperCase() + sector.slice(1)} Stocks**
-| Rank | Symbol | Company | Price | Change | Volume |
-|------|--------|---------|-------|--------|--------|
-${stocks.slice(0, 8).map((stock, index) => {
-  const price = (Math.random() * 200 + 50).toFixed(2);
-  const change = (Math.random() * 15 - 5).toFixed(2);
-  const volume = (Math.random() * 50 + 10).toFixed(1);
-  return `| ${index + 1} | **${stock}** | ${stock} Inc. | ${marketInfo.currency}${price} | ${change > 0 ? '+' : ''}${change}% | ${volume}M |`;
-}).join('\n')}
-
-## 💡 **Sector Insights**
-- **Growth Drivers**: ${['Innovation', 'Digital transformation', 'Consumer demand', 'Regulatory changes'][Math.floor(Math.random() * 4)]} are fueling sector growth
-- **Challenges**: ${['Competition', 'Regulatory pressure', 'Supply chain issues', 'Economic uncertainty'][Math.floor(Math.random() * 4)]} pose risks
-- **Outlook**: ${Math.random() > 0.5 ? 'Positive' : 'Cautious'} for the next quarter
-
-## 🎯 **Investment Opportunities**
-- **High Growth**: ${stocks[0]} and ${stocks[1]} showing strong momentum
-- **Value Picks**: ${stocks[2]} and ${stocks[3]} trading at attractive valuations
-- **Dividend Plays**: ${stocks[4]} and ${stocks[5]} offering stable income
-
-## ⚠️ **Sector-Specific Risks**
-- ${sector === 'tech' ? 'Rapid technological changes and competition' : 
-    sector === 'financial' ? 'Interest rate sensitivity and regulatory changes' :
-    sector === 'healthcare' ? 'Regulatory approvals and patent expirations' :
-    sector === 'energy' ? 'Oil price volatility and environmental regulations' :
-    sector === 'retail' ? 'Consumer spending patterns and e-commerce disruption' :
-    'Clinical trial outcomes and FDA approvals'}
-
-## 📈 **Technical Outlook**
-- **Support Level**: ${marketInfo.currency}${(Math.random() * 100 + 50).toFixed(2)}
-- **Resistance Level**: ${marketInfo.currency}${(Math.random() * 150 + 100).toFixed(2)}
-- **RSI**: ${(Math.random() * 30 + 40).toFixed(1)} (${Math.random() > 0.5 ? 'Neutral' : 'Oversold'})
-
-*This analysis is based on current ${sector} sector data and market conditions in the ${marketInfo.name} market.*`;
-        
-      } else if (isTechnicalAnalysisQuery) {
-        // Handle technical analysis queries
-        const technicalMatch = message.match(/(rsi|macd|bollinger|moving\s+average|stochastic|atr|support|resistance|technical)/i);
-        const indicator = technicalMatch ? technicalMatch[1].toLowerCase() : 'technical';
-        const marketInfo = stockAPI.getMarketInfo(currentMarket);
-        
-        response = `# 📊 **Technical Analysis - ${indicator.toUpperCase()}**
-
-## 🎯 **${indicator.toUpperCase()} Analysis**
-Based on current market data, here's the technical analysis for the ${marketInfo.name} market (${marketInfo.currency}):
-
-## 📈 **Indicator Values**
-${indicator === 'rsi' ? `
-- **Current RSI**: ${(Math.random() * 40 + 30).toFixed(1)}
-- **RSI Status**: ${Math.random() > 0.5 ? 'Neutral' : Math.random() > 0.5 ? 'Oversold' : 'Overbought'}
-- **RSI Trend**: ${Math.random() > 0.5 ? 'Rising' : 'Falling'}
-- **Signal**: ${Math.random() > 0.5 ? 'Buy' : 'Sell'} signal indicated
-` : indicator === 'macd' ? `
-- **MACD Line**: ${(Math.random() * 2 - 1).toFixed(3)}
-- **Signal Line**: ${(Math.random() * 2 - 1).toFixed(3)}
-- **MACD Histogram**: ${(Math.random() * 1 - 0.5).toFixed(3)}
-- **Signal**: ${Math.random() > 0.5 ? 'Bullish' : 'Bearish'} crossover detected
-` : indicator === 'bollinger' ? `
-- **Upper Band**: ${marketInfo.currency}${(Math.random() * 50 + 100).toFixed(2)}
-- **Middle Band**: ${marketInfo.currency}${(Math.random() * 30 + 80).toFixed(2)}
-- **Lower Band**: ${marketInfo.currency}${(Math.random() * 20 + 60).toFixed(2)}
-- **Band Width**: ${(Math.random() * 20 + 10).toFixed(1)}%
-- **Signal**: ${Math.random() > 0.5 ? 'Price near upper band' : 'Price near lower band'}
-` : `
-- **Current Value**: ${(Math.random() * 100 + 50).toFixed(2)}
-- **Previous Value**: ${(Math.random() * 100 + 50).toFixed(2)}
-- **Change**: ${(Math.random() * 10 - 5).toFixed(2)}%
-- **Signal**: ${Math.random() > 0.5 ? 'Positive' : 'Negative'} momentum
-`}
-
-## 📊 **Technical Levels**
-- **Support Level**: ${marketInfo.currency}${(Math.random() * 50 + 50).toFixed(2)}
-- **Resistance Level**: ${marketInfo.currency}${(Math.random() * 50 + 100).toFixed(2)}
-- **Pivot Point**: ${marketInfo.currency}${(Math.random() * 30 + 75).toFixed(2)}
-
-## 🎯 **Trading Signals**
-- **Primary Signal**: ${Math.random() > 0.5 ? 'BUY' : 'SELL'}
-- **Confidence**: ${(Math.random() * 30 + 70).toFixed(0)}%
-- **Timeframe**: ${['Short-term', 'Medium-term', 'Long-term'][Math.floor(Math.random() * 3)]}
-- **Risk Level**: ${['Low', 'Medium', 'High'][Math.floor(Math.random() * 3)]}
-
-## 💡 **Technical Insights**
-- **Trend Direction**: ${Math.random() > 0.5 ? 'Uptrend' : 'Downtrend'} confirmed
-- **Momentum**: ${Math.random() > 0.5 ? 'Strong' : 'Weak'} momentum indicators
-- **Volume**: ${Math.random() > 0.5 ? 'Supporting' : 'Contradicting'} price action
-- **Volatility**: ${(Math.random() * 20 + 10).toFixed(1)}% (${Math.random() > 0.5 ? 'Above' : 'Below'} average)
-
-## ⚠️ **Risk Considerations**
-- Technical indicators are not always accurate
-- Consider fundamental analysis alongside technical signals
-- Market conditions can change rapidly
-- Always use proper risk management
-
-*This technical analysis is based on current market data for the ${marketInfo.name} market.*`;
-        
-      } else if (isCurrencyQuery) {
-        // Handle currency/forex queries
-        const marketInfo = stockAPI.getMarketInfo(currentMarket);
-        
-        response = `# 💱 **Currency & Forex Analysis - ${marketInfo.currency}**
-
-## 🎯 **Exchange Rate Overview**
-Current analysis for ${marketInfo.currency} in the ${marketInfo.name} market:
-
-## 📊 **Major Currency Pairs**
-| Pair | Current Rate | Change | Trend |
-|------|-------------|--------|-------|
-| **${marketInfo.currency}/USD** | ${(Math.random() * 2 + 0.5).toFixed(4)} | ${(Math.random() * 5 - 2.5).toFixed(2)}% | ${Math.random() > 0.5 ? '↗️ Bullish' : '↘️ Bearish'} |
-| **${marketInfo.currency}/EUR** | ${(Math.random() * 2 + 0.5).toFixed(4)} | ${(Math.random() * 5 - 2.5).toFixed(2)}% | ${Math.random() > 0.5 ? '↗️ Bullish' : '↘️ Bearish'} |
-| **${marketInfo.currency}/GBP** | ${(Math.random() * 2 + 0.5).toFixed(4)} | ${(Math.random() * 5 - 2.5).toFixed(2)}% | ${Math.random() > 0.5 ? '↗️ Bullish' : '↘️ Bearish'} |
-| **${marketInfo.currency}/JPY** | ${(Math.random() * 150 + 50).toFixed(2)} | ${(Math.random() * 5 - 2.5).toFixed(2)}% | ${Math.random() > 0.5 ? '↗️ Bullish' : '↘️ Bearish'} |
-
-## 💡 **Currency Insights**
-- **${marketInfo.currency} Strength**: ${Math.random() > 0.5 ? 'Strong' : 'Weak'} against major currencies
-- **Volatility**: ${(Math.random() * 10 + 5).toFixed(1)}% (${Math.random() > 0.5 ? 'Above' : 'Below'} average)
-- **Trading Volume**: ${Math.random() > 0.5 ? 'High' : 'Moderate'} activity
-- **Market Sentiment**: ${Math.random() > 0.5 ? 'Positive' : 'Negative'} for ${marketInfo.currency}
-
-## 🎯 **Forex Trading Opportunities**
-- **Best Pair**: ${marketInfo.currency}/USD showing strong momentum
-- **Risk Level**: ${['Low', 'Medium', 'High'][Math.floor(Math.random() * 3)]}
-- **Recommended Strategy**: ${['Trend following', 'Range trading', 'Breakout trading'][Math.floor(Math.random() * 3)]}
-
-## ⚠️ **Risk Factors**
-- Currency volatility and economic uncertainty
-- Central bank policy changes
-- Economic data releases
-- Geopolitical events affecting ${marketInfo.currency}
-
-## 📈 **Technical Levels**
-- **Support**: ${(Math.random() * 0.5 + 0.5).toFixed(4)}
-- **Resistance**: ${(Math.random() * 0.5 + 1.0).toFixed(4)}
-- **Pivot Point**: ${(Math.random() * 0.5 + 0.75).toFixed(4)}
-
-*This analysis is based on current forex market conditions for ${marketInfo.currency}.*`;
-        
-      } else {
-        // Generic response for queries without specific symbols
-        const marketInfo = stockAPI.getMarketInfo(currentMarket);
-        const { investmentSettings } = useStore.getState();
-        
-        response = `# 🤖 **AI Stock Trading Assistant - ${marketInfo.name} Market**
-
-I'd be happy to help you with stock analysis and predictions for the ${marketInfo.name} market (${marketInfo.currency})! 
-
-**To get specific predictions, please include:**
-- A stock symbol (e.g., ${stockAPI.getMarketSymbols(currentMarket).slice(0, 3).join(', ')})
-- A specific date (e.g., "Monday", "August 4, 2025", "tomorrow")
-- A ranking request (e.g., "top 10 losers", "top 5 gainers")
-- Investment recommendations (e.g., "investment advice", "portfolio suggestions")
-
-**Example queries:**
-- "What's the prediction for ${stockAPI.getMarketSymbols(currentMarket)[0]} on Monday?"
-- "Give me ${stockAPI.getMarketSymbols(currentMarket)[1]}'s price target for tomorrow"
-- "What's the confidence level for ${stockAPI.getMarketSymbols(currentMarket)[2]} this week?"
-- "Show me top 10 losers for Monday"
-- "Top 5 gainers for August 4, 2025"
-- "Give me investment recommendations"
-- "What should I invest in?"
-
-**I can provide:**
-- 📈 Stock price predictions with confidence levels
-- 📊 Day trading analysis for specific dates
-- 🎯 Technical analysis and trading signals
-- 📊 Top gainers/losers rankings
-- 💼 Investment recommendations based on your risk profile
-- ⚠️ Risk assessment and mitigation strategies
-- 💱 Currency-specific analysis
-
-**Current Market**: ${marketInfo.name} (${marketInfo.currency})
-**Your Risk Profile**: ${investmentSettings.riskTolerance.charAt(0).toUpperCase() + investmentSettings.riskTolerance.slice(1)}
-
-Please provide a stock symbol and date for a detailed analysis, or ask for investment recommendations!`;
-      }
-      return response;
-    } catch (error) {
-      console.error('Error generating specific response:', error);
-      const marketInfo = stockAPI.getMarketInfo(currentMarket);
-      return `# ❌ **Error Generating Prediction**
-
-I encountered an error while trying to generate a prediction for ${symbol || 'the requested stock'} in the ${marketInfo.name} market.
-
-**Possible reasons:**
-- The stock symbol might not be available in ${marketInfo.name}
-- Market data might be temporarily unavailable
-- The requested date might be outside trading hours
-
-**Please try:**
-- Checking the stock symbol spelling
-- Using a different date
-- Asking for a general market analysis
-
-*Error: ${error.message}*`;
+  const formatStockResponse = (data, symbol) => {
+    if (!data || !data.summary) {
+      return `I couldn't fetch stock data for ${symbol} at the moment. Please check the symbol and try again.`;
     }
+
+    const summary = data.summary;
+    return `## 📊 ${symbol} Stock Information
+
+**Current Price:** $${summary.current_price?.toFixed(2) || 'N/A'}
+**Change:** ${summary.price_change >= 0 ? '+' : ''}${summary.price_change?.toFixed(2) || 'N/A'} (${summary.price_change_pct >= 0 ? '+' : ''}${summary.price_change_pct?.toFixed(2) || 'N/A'}%)
+**Volume:** ${summary.volume?.toLocaleString() || 'N/A'}
+**Market Cap:** ${summary.market_cap ? `$${(summary.market_cap / 1e9).toFixed(1)}B` : 'N/A'}
+
+**52-Week Range:** $${summary.low_52w?.toFixed(2) || 'N/A'} - $${summary.high_52w?.toFixed(2) || 'N/A'}
+**PE Ratio:** ${summary.pe_ratio || 'N/A'}
+**Dividend Yield:** ${summary.dividend_yield || 'N/A'}
+
+*Data as of ${new Date().toLocaleString()}*`;
   };
 
-  const handleSendMessage = async () => {
-    if (!inputMessage.trim() || isLoading) return;
-
-    const userMessage = {
-      id: messages.length + 1,
-      type: 'user',
-      content: inputMessage,
-      timestamp: new Date(),
-    };
-
-    setMessages(prev => [...prev, userMessage]);
-    setInputMessage('');
-    setIsLoading(true);
-
-    try {
-      // First, try MarketMate API for natural language processing
-      let response;
-      try {
-        console.log('Trying MarketMate API for:', inputMessage);
-        const marketMateResponse = await marketMateAPI.processQueryPost(inputMessage);
-        
-        if (marketMateResponse && marketMateResponse.RESULT) {
-          // Format MarketMate response as conversational chat
-          let chatResponse = marketMateResponse.RESULT;
-          
-          // Make it more conversational by removing markdown formatting and adding chat-like responses
-          if (marketMateResponse.RESULT.includes('Current Price:')) {
-            // For price queries, make it more conversational
-            const priceMatch = marketMateResponse.RESULT.match(/\*\*(.*?)\*\*.*?Current Price: (.*?)(?:\n|$)/);
-            if (priceMatch) {
-              const companyName = priceMatch[1];
-              const price = priceMatch[2];
-              chatResponse = `The current price of ${companyName} is ${price}.`;
-              
-              // Add source information in a conversational way
-              if (marketMateResponse.SOURCES && marketMateResponse.SOURCES.includes('MarketStack API')) {
-                chatResponse += ` This is real-time market data from MarketStack API.`;
-              }
-            }
-          } else if (marketMateResponse.RESULT.includes('Prediction')) {
-            // For prediction queries, make it more conversational
-            chatResponse = marketMateResponse.RESULT.replace(/\*\*(.*?)\*\*/g, '$1');
-            chatResponse = chatResponse.replace(/## /g, '').replace(/\n\n/g, '\n');
-          } else {
-            // For other queries, clean up the formatting
-            chatResponse = marketMateResponse.RESULT.replace(/\*\*(.*?)\*\*/g, '$1');
-            chatResponse = chatResponse.replace(/## /g, '').replace(/\n\n/g, '\n');
-          }
-          
-          response = chatResponse;
-        } else {
-          throw new Error('MarketMate API returned empty response');
-        }
-      } catch (marketMateError) {
-        console.log('MarketMate API failed, falling back to legacy logic:', marketMateError.message);
-        
-        // Fallback to existing logic
-        // Extract stock symbol and date from the message
-        const symbol = extractStockSymbol(inputMessage);
-        const targetDate = extractDate(inputMessage);
-        
-        console.log('Extracted:', { symbol, targetDate, message: inputMessage });
-
-        // Detect market from symbol if available
-        let detectedMarket = currentMarket;
-        if (symbol) {
-          detectedMarket = detectMarketFromSymbol(symbol);
-          console.log('Detected market:', detectedMarket, 'for symbol:', symbol);
-        }
-
-        // Validate stock symbol if provided
-        let validatedSymbol = symbol;
-        if (symbol) {
-          validatedSymbol = await validateStockSymbol(symbol, detectedMarket);
-          if (!validatedSymbol) {
-            // Try alternative markets for US symbols
-            if (!symbol.includes('.')) {
-              for (const market of ['US', 'UK', 'IN']) {
-                const altSymbol = await validateStockSymbol(symbol, market);
-                if (altSymbol) {
-                  validatedSymbol = altSymbol;
-                  detectedMarket = market;
-                  break;
-                }
-              }
-            }
-          }
-        }
-
-        // Generate specific response based on the query
-        if (symbol && !validatedSymbol) {
-          // No valid stock symbol found, provide helpful guidance
-          response = `# ❓ **Stock Symbol Not Found**
-
-I couldn't find a valid stock symbol in your message: **"${inputMessage}"**
-
-## 🔍 **What I detected:**
-- **Extracted symbol**: ${symbol}
-- **Detected market**: ${detectedMarket}
-- **Validation result**: Symbol not found in ${detectedMarket} market
-
-## 💡 **Please try one of these:**
-
-### 🇺🇸 **US Market Examples:**
-- "What's the prediction for **AAPL** tomorrow?"
-- "Give me a day trading prediction for **MSFT** on Monday"
-- "What's the confidence level for **GOOGL** this week?"
-
-### 🇬🇧 **UK Market Examples:**
-- "What's the prediction for **VOD.L** tomorrow?"
-- "Give me a day trading prediction for **HSBA.L** on Monday"
-- "What's the confidence level for **BP.L** this week?"
-
-### 🇮🇳 **India Market Examples:**
-- "What's the prediction for **RELIANCE.NS** tomorrow?"
-- "Give me a day trading prediction for **TCS.NS** on Monday"
-- "What's the confidence level for **HDFCBANK.NS** this week?"
-
-## 🎯 **Or ask for general analysis:**
-- "Show me top 10 tech stocks in US market"
-- "Give me investment recommendations for UK market"
-- "What's the market outlook for India?"
-
-**💡 Just type any valid stock symbol and I'll automatically detect the market!**`;
-        } else {
-          response = await generateSpecificResponse(inputMessage, validatedSymbol, targetDate, detectedMarket);
-        }
-      }
-      
-      const assistantMessage = {
-        id: messages.length + 2,
-        type: 'assistant',
-        content: response,
-        timestamp: new Date(),
-      };
-
-      setMessages(prev => [...prev, assistantMessage]);
-    } catch (error) {
-      console.error('Error in chat:', error);
-      
-      const errorMessage = {
-        id: messages.length + 2,
-        type: 'assistant',
-        content: `# ❌ **Error**
-
-I encountered an error while processing your request. Please try again or rephrase your question.
-
-**Supported Markets:**
-- 🇺🇸 **US**: AAPL, MSFT, GOOGL, TSLA, etc.
-- 🇬🇧 **UK**: VOD.L, HSBA.L, BP.L, etc.
-- 🇮🇳 **India**: RELIANCE.NS, TCS.NS, HDFCBANK.NS, etc.
-
-**Example queries:**
-- "What's the prediction for AAPL tomorrow?"
-- "Give me a day trading prediction for VOD.L on Monday"
-- "What's the confidence level for RELIANCE.NS this week?"
-
-*Error: ${error.message}*`,
-        timestamp: new Date(),
-      };
-
-      setMessages(prev => [...prev, errorMessage]);
-    } finally {
-      setIsLoading(false);
+  const formatPredictionResponse = (data, symbol) => {
+    if (!data || !data.prediction) {
+      return `I couldn't generate a prediction for ${symbol} at the moment. Please try again later.`;
     }
+
+    const prediction = data.prediction;
+    return `## 🔮 ${symbol} AI Prediction
+
+**Direction:** ${prediction.direction || 'Neutral'} ${prediction.direction === 'Bullish' ? '📈' : prediction.direction === 'Bearish' ? '📉' : '➡️'}
+**Confidence:** ${prediction.confidence || 'N/A'}%
+**Target Price:** $${prediction.target_price || 'N/A'}
+**Timeframe:** ${prediction.timeframe || 'N/A'}
+
+**Technical Analysis:**
+${prediction.technical_analysis || 'Analysis based on current market conditions and technical indicators.'}
+
+**Fundamental Analysis:**
+${prediction.fundamental_analysis || 'Review of company fundamentals and market conditions.'}
+
+**Risk Assessment:** ${prediction.risk_level || 'Medium'}
+
+⚠️ **Disclaimer:** This prediction is for educational purposes only and not financial advice. Always do your own research before making investment decisions.`;
+  };
+
+  const formatTradingResponse = (data, symbol) => {
+    if (!data || !data.prediction) {
+      return `I couldn't generate day trading analysis for ${symbol} at the moment. Please try again later.`;
+    }
+
+    const prediction = data.prediction;
+    return `## 🎯 Day Trading Strategy for ${symbol}
+
+**Strategy Type:** ${prediction.strategy || 'Momentum Trading'}
+**Entry Point:** $${prediction.entry_price || 'N/A'}
+**Stop Loss:** $${prediction.stop_loss || 'N/A'}
+**Take Profit:** $${prediction.take_profit || 'N/A'}
+**Risk Level:** ${prediction.risk_level || 'Medium'}
+**Confidence:** ${prediction.confidence || 'N/A'}%
+
+**Trading Plan:**
+1. **Entry:** Wait for price to reach entry point with confirmation
+2. **Management:** Use stop loss to limit downside risk
+3. **Exit:** Take profit at target or stop loss if hit
+
+**Key Levels to Watch:**
+- Entry: $${prediction.entry_price || 'N/A'}
+- Stop Loss: $${prediction.stop_loss || 'N/A'}
+- Take Profit: $${prediction.take_profit || 'N/A'}
+
+⚠️ **Risk Warning:** Day trading involves significant risk and can result in substantial financial losses. Only trade with money you can afford to lose.`;
+  };
+
+  const generateDefaultResponse = (query) => {
+    return `I'm your AI Trading Assistant! 🤖 I can help you with various aspects of stock trading and market analysis.
+
+**What I can help you with:**
+
+📈 **Stock Information**
+- Current prices and market data
+- Historical performance
+- Company fundamentals
+
+🔮 **AI Predictions**
+- Price direction forecasts
+- Technical analysis
+- Market sentiment analysis
+
+🎯 **Trading Strategies**
+- Day trading opportunities
+- Risk management
+- Position sizing
+
+📊 **Portfolio Analysis**
+- Performance tracking
+- Risk assessment
+- Diversification advice
+
+**Try asking me:**
+- "What's the price of AAPL?"
+- "Predict TSLA direction for tomorrow"
+- "Day trading strategy for MSFT"
+- "Analyze my portfolio risk"
+
+What would you like to know about the stock market?`;
+  };
+
+  const generateChatTitle = (message) => {
+    const words = message.split(' ').slice(0, 4);
+    return words.join(' ') + (message.split(' ').length > 4 ? '...' : '');
   };
 
   const handleKeyPress = (e) => {
@@ -1146,93 +588,326 @@ I encountered an error while processing your request. Please try again or rephra
     }
   };
 
+  const filteredChatHistory = chatHistory.filter(chat =>
+    chat.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    chat.messages.some(msg => msg.content.toLowerCase().includes(searchQuery.toLowerCase()))
+  );
+
+
   return (
-    <div className="flex flex-col h-full">
-      {/* Header */}
-      <div className="bg-white border-b border-gray-200 px-4 sm:px-6 py-3 sm:py-4">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between space-y-2 sm:space-y-0">
-          <div>
-            <h1 className="text-lg sm:text-xl font-semibold text-gray-900">AI Trading Assistant</h1>
-            <p className="text-xs sm:text-sm text-gray-600">Get real-time stock predictions and trading insights</p>
+    <div className={`flex h-screen ${darkMode ? 'bg-gray-900' : 'bg-white'}`}>
+      {/* Sidebar */}
+      <div className={`${sidebarOpen ? 'w-80' : 'w-0'} transition-all duration-300 ${darkMode ? 'bg-gray-800' : 'bg-gray-50'} border-r ${darkMode ? 'border-gray-700' : 'border-gray-200'} overflow-hidden flex flex-col`}>
+        <div className="p-4 border-b border-gray-200 dark:border-gray-700">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className={`text-lg font-semibold ${darkMode ? 'text-white' : 'text-gray-900'}`}>Chat History</h2>
+            <button
+              onClick={() => setSidebarOpen(false)}
+              className={`p-1 rounded-lg hover:bg-gray-200 ${darkMode ? 'hover:bg-gray-700' : ''}`}
+            >
+              <XMarkIcon className="w-5 h-5 text-gray-500" />
+            </button>
           </div>
-          <div className="flex items-center space-x-2 sm:space-x-4">
-            {/* Market Selector */}
-            <div className="flex items-center space-x-1 sm:space-x-2">
-              <GlobeAltIcon className="w-4 h-4 text-gray-500" />
-              <select
-                value={currentMarket}
-                onChange={(e) => useStore.getState().setCurrentMarket(e.target.value)}
-                className="text-xs sm:text-sm border border-gray-300 rounded px-2 py-1 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          
+          <button
+            onClick={createNewChat}
+            className={`w-full flex items-center space-x-2 px-3 py-2 rounded-lg border transition-colors ${
+              darkMode 
+                ? 'border-gray-700 hover:bg-gray-700 text-white' 
+                : 'border-gray-300 hover:bg-gray-100 text-gray-700'
+            }`}
+          >
+            <PlusIcon className="w-4 h-4" />
+            <span>New Chat</span>
+          </button>
+
+          <div className="relative mt-4">
+            <MagnifyingGlassIcon className="w-4 h-4 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+            <input
+              type="text"
+              placeholder="Search chats..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className={`w-full pl-10 pr-4 py-2 rounded-lg border text-sm ${
+                darkMode 
+                  ? 'bg-gray-700 border-gray-600 text-white placeholder-gray-400' 
+                  : 'bg-white border-gray-300 text-gray-900 placeholder-gray-500'
+              }`}
+            />
+          </div>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-4">
+          <div className="space-y-2">
+            {filteredChatHistory.map((chat) => (
+              <div
+                key={chat.id}
+                className={`p-3 rounded-lg cursor-pointer group transition-colors ${
+                  currentChatId === chat.id
+                    ? darkMode ? 'bg-gray-700' : 'bg-blue-50'
+                    : darkMode ? 'hover:bg-gray-700' : 'hover:bg-gray-100'
+                }`}
+                onClick={() => loadChat(chat.id)}
               >
-                <option value="US">🇺🇸 US</option>
-                <option value="UK">🇬🇧 UK</option>
-                <option value="CA">🇨🇦 Canada</option>
-                <option value="AU">🇦🇺 Australia</option>
-                <option value="DE">🇩🇪 Germany</option>
-                <option value="JP">🇯🇵 Japan</option>
-                <option value="IN">🇮🇳 India</option>
-                <option value="BR">🇧🇷 Brazil</option>
-              </select>
-            </div>
-            <div className="text-xs text-gray-500">
-              {stockAPI.getMarketInfo(currentMarket).currency}
-            </div>
+                <div className="flex items-center justify-between">
+                  <div className="flex-1 min-w-0">
+                    <span className={`text-sm font-medium truncate block ${darkMode ? 'text-white' : 'text-gray-900'}`}>
+                      {chat.title}
+                    </span>
+                    <p className={`text-xs ${darkMode ? 'text-gray-400' : 'text-gray-500'} mt-1`}>
+                      {chat.messages.length} messages • {chat.timestamp.toLocaleDateString()}
+                    </p>
+                  </div>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      deleteChat(chat.id);
+                    }}
+                    className="opacity-0 group-hover:opacity-100 p-1 hover:bg-red-100 rounded transition-all"
+                  >
+                    <TrashIcon className="w-3 h-3 text-red-500" />
+                  </button>
+                </div>
+              </div>
+            ))}
           </div>
         </div>
       </div>
 
-      {/* Messages */}
-      <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-3 sm:space-y-4">
-        {messages.map((message) => (
-          <div key={message.id} className={`flex ${message.type === 'user' ? 'justify-end' : 'justify-start'}`}>
-            <div className={`max-w-[85%] sm:max-w-xs lg:max-w-4xl px-3 sm:px-4 py-2 sm:py-3 rounded-lg ${message.type === 'user' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-900'}`}>
-              <div className="text-xs sm:text-sm prose prose-sm max-w-none">
-                <ReactMarkdown>{message.content}</ReactMarkdown>
+      {/* Main Chat Area */}
+      <div className="flex-1 flex flex-col">
+        {/* Header */}
+        <div className={`flex items-center justify-between p-4 border-b ${darkMode ? 'border-gray-700' : 'border-gray-200'}`}>
+          <div className="flex items-center space-x-4">
+            {!sidebarOpen && (
+              <button
+                onClick={() => setSidebarOpen(true)}
+                className={`p-2 rounded-lg hover:bg-gray-100 ${darkMode ? 'hover:bg-gray-700' : ''}`}
+              >
+                <Bars3Icon className="w-5 h-5 text-gray-500" />
+              </button>
+            )}
+            <div className="flex items-center space-x-2">
+              <div className="w-8 h-8 bg-gradient-to-r from-blue-500 to-purple-600 rounded-full flex items-center justify-center">
+                <SparklesIcon className="w-4 h-4 text-white" />
               </div>
-              <p className={`text-xs mt-2 ${message.type === 'user' ? 'text-blue-100' : 'text-gray-500'}`}>
-                {message.timestamp.toLocaleTimeString()}
-              </p>
+              <h1 className={`text-lg font-semibold ${darkMode ? 'text-white' : 'text-gray-900'}`}>
+                StockBroker AI Assistant
+              </h1>
             </div>
           </div>
-        ))}
-        {isLoading && (
-          <div className="flex justify-start">
-            <div className="bg-gray-100 text-gray-900 px-3 sm:px-4 py-2 sm:py-3 rounded-lg">
-              <div className="flex items-center space-x-2">
-                <LoadingSpinner size="sm" />
-                <span className="text-xs sm:text-sm">Generating prediction...</span>
+          
+          <div className="flex items-center space-x-2">
+            <button
+              onClick={() => navigate('/dashboard')}
+              className={`p-2 rounded-lg hover:bg-gray-100 ${darkMode ? 'hover:bg-gray-700' : ''}`}
+              title="Go to Main Page"
+              aria-label="Go to Main Page"
+            >
+              <HomeIcon className="w-5 h-5 text-gray-500" />
+            </button>
+            <button
+              onClick={() => setShowExport(true)}
+              className={`p-2 rounded-lg hover:bg-gray-100 ${darkMode ? 'hover:bg-gray-700' : ''}`}
+              title="Export chat"
+              aria-label="Export chat conversation"
+            >
+              <DocumentArrowDownIcon className="w-5 h-5 text-gray-500" />
+            </button>
+            <button
+              onClick={() => setDarkMode(!darkMode)}
+              className={`p-2 rounded-lg hover:bg-gray-100 ${darkMode ? 'hover:bg-gray-700' : ''}`}
+              title={darkMode ? "Switch to light mode" : "Switch to dark mode"}
+              aria-label={darkMode ? "Switch to light mode" : "Switch to dark mode"}
+            >
+              {darkMode ? <SunIcon className="w-5 h-5 text-gray-500" /> : <MoonIcon className="w-5 h-5 text-gray-500" />}
+            </button>
+            <button
+              onClick={() => setShowSettings(!showSettings)}
+              className={`p-2 rounded-lg hover:bg-gray-100 ${darkMode ? 'hover:bg-gray-700' : ''}`}
+              title="Settings"
+              aria-label="Open settings"
+            >
+              <Cog6ToothIcon className="w-5 h-5 text-gray-500" />
+            </button>
+          </div>
+        </div>
+
+        {/* Settings Panel */}
+        {showSettings && (
+          <div className={`p-4 border-b ${darkMode ? 'border-gray-700 bg-gray-800' : 'border-gray-200 bg-gray-50'}`}>
+            <div className="max-w-4xl mx-auto">
+              <h3 className={`text-sm font-medium mb-4 ${darkMode ? 'text-white' : 'text-gray-900'}`}>Model Settings</h3>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                  <label className={`block text-xs font-medium mb-2 ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>
+                    Model
+                  </label>
+                  <select
+                    value={selectedModel}
+                    onChange={(e) => setSelectedModel(e.target.value)}
+                    className={`w-full px-3 py-2 rounded-lg border text-sm ${
+                      darkMode 
+                        ? 'bg-gray-700 border-gray-600 text-white' 
+                        : 'bg-white border-gray-300 text-gray-900'
+                    }`}
+                  >
+                    <option value="gpt-4">GPT-4</option>
+                    <option value="gpt-3.5-turbo">GPT-3.5 Turbo</option>
+                    <option value="claude-3">Claude 3</option>
+                  </select>
+                </div>
+                <div>
+                  <label className={`block text-xs font-medium mb-2 ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>
+                    Temperature: {temperature}
+                  </label>
+                  <input
+                    type="range"
+                    min="0"
+                    max="1"
+                    step="0.1"
+                    value={temperature}
+                    onChange={(e) => setTemperature(parseFloat(e.target.value))}
+                    className="w-full"
+                  />
+                </div>
+                <div>
+                  <label className={`block text-xs font-medium mb-2 ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>
+                    Max Tokens: {maxTokens}
+                  </label>
+                  <input
+                    type="range"
+                    min="512"
+                    max="4096"
+                    step="512"
+                    value={maxTokens}
+                    onChange={(e) => setMaxTokens(parseInt(e.target.value))}
+                    className="w-full"
+                  />
+                </div>
               </div>
             </div>
           </div>
         )}
-        <div ref={messagesEndRef} />
+
+        {/* Messages */}
+        <div className="flex-1 overflow-y-auto p-4 space-y-4">
+          {messages.length === 0 && (
+            <div className="flex flex-col items-center justify-center h-full text-center">
+              <div className="w-20 h-20 bg-gradient-to-r from-blue-100 to-purple-100 rounded-full flex items-center justify-center mb-6">
+                <SparklesIcon className="w-10 h-10 text-blue-600" />
+              </div>
+              <h2 className={`text-2xl font-semibold mb-4 ${darkMode ? 'text-white' : 'text-gray-900'}`}>
+                Welcome to StockBroker AI Assistant
+              </h2>
+              <p className={`text-gray-500 mb-8 max-w-2xl ${darkMode ? 'text-gray-400' : ''}`}>
+                I'm your intelligent trading companion. I can help you with stock analysis, predictions, 
+                trading strategies, portfolio management, and market insights. Ask me anything about the stock market!
+              </p>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-4xl">
+                {[
+                  { icon: ChartBarIcon, text: "What's the price of AAPL?", color: "blue" },
+                  { icon: ArrowUpIcon, text: "Predict TSLA direction for tomorrow", color: "green" },
+                  { icon: CurrencyDollarIcon, text: "Day trading strategy for MSFT", color: "purple" },
+                  { icon: DocumentTextIcon, text: "Market analysis for tech stocks", color: "orange" }
+                ].map((suggestion, index) => (
+                  <button
+                    key={index}
+                    onClick={() => setInputMessage(suggestion.text)}
+                    className={`p-4 text-left rounded-xl border transition-all hover:scale-105 ${
+                      darkMode 
+                        ? 'border-gray-700 hover:bg-gray-700 text-gray-300' 
+                        : 'border-gray-200 hover:bg-gray-50 text-gray-700'
+                    }`}
+                  >
+                    <div className="flex items-center space-x-3">
+                      <div className={`w-8 h-8 bg-${suggestion.color}-100 rounded-lg flex items-center justify-center`}>
+                        <suggestion.icon className={`w-4 h-4 text-${suggestion.color}-600`} />
+                      </div>
+                      <span className="text-sm font-medium">{suggestion.text}</span>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {messages.map((message) => (
+            <ChatMessage
+              key={message.id}
+              message={message}
+              onCopy={copyMessage}
+              onRegenerate={regenerateResponse}
+              onPin={() => {}}
+              isDarkMode={darkMode}
+              showTimestamp={true}
+            />
+          ))}
+
+          {/* Streaming message */}
+          {streamingMessage && (
+            <ChatMessage
+              message={{
+                id: 'streaming',
+                type: 'assistant',
+                content: streamingMessage,
+                timestamp: new Date()
+              }}
+              isDarkMode={darkMode}
+              showTimestamp={false}
+            />
+          )}
+
+          {/* Loading indicator */}
+          {isLoading && !streamingMessage && (
+            <div className="flex justify-start">
+              <div className="max-w-4xl mr-12">
+                <div className="flex items-start space-x-3">
+                  <div className="w-8 h-8 bg-gradient-to-r from-blue-500 to-purple-600 rounded-full flex items-center justify-center">
+                    <SparklesIcon className="w-4 h-4 text-white" />
+                  </div>
+                  <div className={`p-4 rounded-2xl ${darkMode ? 'bg-gray-800' : 'bg-gray-100'}`}>
+                    <div className="flex items-center space-x-2">
+                      <div className="flex space-x-1">
+                        <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></div>
+                        <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
+                        <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
+                      </div>
+                      <span className={`text-sm ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                        AI is thinking...
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+          
+          <div ref={messagesEndRef} />
+        </div>
+
+        {/* Input Area */}
+        <ChatInput
+          value={inputMessage}
+          onChange={setInputMessage}
+          onSend={() => handleSendMessage()}
+          onStop={stopGeneration}
+          isLoading={isLoading}
+          isDarkMode={darkMode}
+          placeholder="Ask about stock prices, predictions, trading strategies, or market analysis..."
+        />
       </div>
 
-      {/* Input */}
-      <div className="bg-white border-t border-gray-200 px-4 sm:px-6 py-3 sm:py-4">
-        <div className="flex space-x-2 sm:space-x-4">
-          <div className="flex-1">
-            <textarea
-              value={inputMessage}
-              onChange={(e) => setInputMessage(e.target.value)}
-              onKeyPress={handleKeyPress}
-              placeholder="Ask about stock predictions, trading strategies, or market analysis..."
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none text-sm sm:text-base"
-              rows={2}
-              disabled={isLoading}
-            />
-          </div>
-          <button
-            onClick={handleSendMessage}
-            disabled={!inputMessage.trim() || isLoading}
-            className="bg-blue-600 text-white px-3 sm:px-4 py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex-shrink-0"
-          >
-            <PaperAirplaneIcon className="w-4 h-4 sm:w-5 sm:h-5" />
-          </button>
-        </div>
-      </div>
+      {/* Export Modal */}
+      <ExportChat
+        messages={messages}
+        chatTitle={chatHistory.find(chat => chat.id === currentChatId)?.title || 'New Chat'}
+        isOpen={showExport}
+        onClose={() => setShowExport(false)}
+        isDarkMode={darkMode}
+      />
     </div>
   );
 };
 
-export default AIAssistant; 
+export default AIAssistant;
