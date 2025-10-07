@@ -88,7 +88,10 @@ export const getTradingAccessToken = async () => {
     }
     
     // If not in storage, get from API
-    const response = await fetch('/api/trading/access');
+    const API_BASE_URL = process.env.NODE_ENV === 'production' || window.location.hostname !== 'localhost' 
+      ? 'https://ai-stock-trading-backend-o6i75igepq-uc.a.run.app'
+      : 'http://localhost:8080';
+    const response = await fetch(`${API_BASE_URL}/api/trading/access`);
     const data = await response.json();
     
     if (data.access_tokens) {

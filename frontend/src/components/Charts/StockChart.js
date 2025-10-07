@@ -42,7 +42,18 @@ const StockChart = ({ symbol, period = '1y', interval = '1d', showVolume = true,
       const response = await stockAPI.getStockData(symbol, period);
       
       if (response && response.data) {
-        const formattedData = response.data.map((item, index) => ({
+        // Handle different response structures
+        const dataArray = Array.isArray(response.data) ? response.data : 
+                         (response.data.data && Array.isArray(response.data.data)) ? response.data.data :
+                         (response.data.values && Array.isArray(response.data.values)) ? response.data.values : [];
+        
+        if (dataArray.length === 0) {
+          console.warn('No chart data available:', response.data);
+          setError('No chart data available');
+          return;
+        }
+        
+        const formattedData = dataArray.map((item, index) => ({
           date: new Date(item.Date || item.date).toLocaleDateString(),
           timestamp: new Date(item.Date || item.date).getTime(),
           open: parseFloat(item.Open),
@@ -50,12 +61,12 @@ const StockChart = ({ symbol, period = '1y', interval = '1d', showVolume = true,
           low: parseFloat(item.Low),
           close: parseFloat(item.Close),
           volume: parseInt(item.Volume) || 0,
-          sma20: calculateSMA(response.data, 20, index),
-          ema12: calculateEMA(response.data, 12, index),
-          bollingerUpper: calculateBollingerBands(response.data, 20, 2, index).upper,
-          bollingerLower: calculateBollingerBands(response.data, 20, 2, index).lower,
-          rsi: calculateRSI(response.data, 14, index),
-          macd: calculateMACD(response.data, index),
+          sma20: calculateSMA(dataArray, 20, index),
+          ema12: calculateEMA(dataArray, 12, index),
+          bollingerUpper: calculateBollingerBands(dataArray, 20, 2, index).upper,
+          bollingerLower: calculateBollingerBands(dataArray, 20, 2, index).lower,
+          rsi: calculateRSI(dataArray, 14, index),
+          macd: calculateMACD(dataArray, index),
         }));
         
         setChartData(formattedData);

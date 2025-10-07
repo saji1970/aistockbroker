@@ -170,7 +170,7 @@ def get_current_user():
             'message': 'An error occurred while fetching user data'
         }), 500
 
-@auth_bp.route('/verify-session', methods=['POST'])
+@auth_bp.route('/verify-session', methods=['GET', 'POST'])
 @log_api_access
 @security_headers
 def verify_session():

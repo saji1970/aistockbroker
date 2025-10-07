@@ -2,7 +2,7 @@
 const getAPIBaseURL = () => {
   // If running in production (GCP), use the production API URL
   if (process.env.NODE_ENV === 'production' || window.location.hostname !== 'localhost') {
-    return 'https://ai-stock-trading-backend-1012090067429.us-central1.run.app';
+    return 'https://ai-stock-trading-backend-o6i75igepq-uc.a.run.app';
   }
   // For local development
   return 'http://localhost:8080';
