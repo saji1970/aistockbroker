@@ -806,22 +806,141 @@ def day_trading_prediction(symbol):
         
         logger.info(f"Generating day trading prediction for {symbol} on {target_date}")
         
-        # Mock day trading prediction
+        # Mock day trading prediction with frontend-compatible format
+        import random
+        import numpy as np
+        from datetime import datetime
+        
+        # Generate realistic mock data
+        base_price = random.uniform(50, 300)
+        volatility = random.uniform(0.15, 0.35)
+        
+        # Mock sentiment
+        sentiments = ['Bullish', 'Bearish', 'Neutral']
+        sentiment = random.choice(sentiments)
+        confidence = random.randint(60, 85)
+        
+        # Mock technical indicators
+        rsi = random.uniform(30, 70)
+        sma_20 = base_price * random.uniform(0.95, 1.05)
+        ema_12 = base_price * random.uniform(0.96, 1.04)
+        
+        # Mock intraday predictions
+        volatility_factor = volatility * 100
+        intraday_predictions = {
+            'open': {
+                'min': base_price * (1 - volatility_factor * 0.01),
+                'max': base_price * (1 + volatility_factor * 0.01),
+                'expected': base_price * (1 + (random.random() - 0.5) * volatility_factor * 0.005)
+            },
+            'mid_morning': {
+                'min': base_price * (1 - volatility_factor * 0.008),
+                'max': base_price * (1 + volatility_factor * 0.012),
+                'expected': base_price * (1 + (random.random() - 0.5) * volatility_factor * 0.01)
+            },
+            'lunch': {
+                'min': base_price * (1 - volatility_factor * 0.006),
+                'max': base_price * (1 + volatility_factor * 0.010),
+                'expected': base_price * (1 + (random.random() - 0.5) * volatility_factor * 0.008)
+            },
+            'afternoon': {
+                'min': base_price * (1 - volatility_factor * 0.008),
+                'max': base_price * (1 + volatility_factor * 0.012),
+                'expected': base_price * (1 + (random.random() - 0.5) * volatility_factor * 0.01)
+            },
+            'close': {
+                'min': base_price * (1 - volatility_factor * 0.010),
+                'max': base_price * (1 + volatility_factor * 0.008),
+                'expected': base_price * (1 + (random.random() - 0.5) * volatility_factor * 0.006)
+            }
+        }
+        
+        # Mock trading signals
+        signals = []
+        if sentiment == 'Bullish':
+            signals.append({
+                'time': '09:30-10:30',
+                'signal': 'BUY',
+                'confidence': confidence,
+                'reasoning': 'Strong opening momentum expected based on technical analysis',
+                'target_price': base_price * 1.02,
+                'stop_loss': base_price * 0.98
+            })
+        elif sentiment == 'Bearish':
+            signals.append({
+                'time': '09:30-10:30',
+                'signal': 'SELL',
+                'confidence': confidence,
+                'reasoning': 'Downward momentum expected based on technical analysis',
+                'target_price': base_price * 0.98,
+                'stop_loss': base_price * 1.02
+            })
+        else:
+            signals.append({
+                'time': '09:30-10:30',
+                'signal': 'HOLD',
+                'confidence': confidence,
+                'reasoning': 'Neutral conditions, wait for clearer signals',
+                'target_price': base_price,
+                'stop_loss': base_price * 0.99
+            })
+        
+        # Mock risk factors
+        risk_factors = [
+            {
+                'factor': 'Market Volatility',
+                'impact': 'High' if volatility > 0.25 else 'Medium',
+                'description': f'Expected volatility: {volatility:.2%}',
+                'mitigation': 'Use tight stop losses and position sizing'
+            }
+        ]
+        
+        # Mock technical levels
+        high_20 = base_price * 1.05
+        low_20 = base_price * 0.95
+        pivot = (high_20 + low_20 + base_price) / 3
+        
+        # Mock LSTM analysis
+        lstm_analysis = {
+            'trend_direction': sentiment,
+            'prediction_factor': volatility * 100,
+            'momentum': 'Strong' if volatility > 0.25 else 'Moderate'
+        }
+        
         prediction = {
             'symbol': symbol,
             'target_date': target_date,
-            'entry_price': 258.0,
-            'stop_loss': 250.0,
-            'take_profit': 270.0,
-            'confidence': 78,
-            'strategy': 'Breakout',
-            'risk_level': 'Medium'
+            'timestamp': datetime.now().isoformat(),
+            'current_price': base_price,
+            'intraday_predictions': intraday_predictions,
+            'signals': signals,
+            'risk_factors': risk_factors,
+            'technical_levels': {
+                'support': [low_20, low_20 * 0.98, low_20 * 0.96],
+                'resistance': [high_20, high_20 * 1.02, high_20 * 1.04],
+                'pivot': pivot
+            },
+            'sentiment': {
+                'overall': sentiment,
+                'confidence': confidence,
+                'factors': [
+                    f'RSI: {rsi:.1f}',
+                    f'Price vs SMA20: {"Above" if base_price > sma_20 else "Below"}',
+                    f'Volatility: {volatility:.2%}'
+                ]
+            },
+            'indicators': {
+                'rsi': rsi,
+                'sma_20': sma_20,
+                'ema_12': ema_12,
+                'volatility': volatility
+            },
+            'lstm_analysis': lstm_analysis,
+            'demo_mode': True,
+            'note': 'This is a demo prediction. AI predictor not available.'
         }
         
-        return jsonify({
-            'success': True,
-            'prediction': prediction
-        })
+        return jsonify(prediction)
         
     except Exception as e:
         logger.error(f"Error generating day trading prediction for {symbol}: {e}")
