@@ -974,7 +974,7 @@ def day_trading_prediction(symbol):
                 'confidence': confidence,
                 'factors': [
                     f'RSI: {rsi:.1f}',
-                    f'Price vs SMA20: {"Above" if base_price > sma_20 else "Below"}',
+                    f'Price vs SMA20: {"Above" if current_price > sma_20 else "Below"}',
                     f'Volatility: {volatility:.2%}'
                 ]
             },
