@@ -479,133 +479,6 @@ def get_users():
             'error': 'Failed to get users'
         }), 500
 
-# AI Prompt Management Endpoints
-@app.route('/api/admin/ai-prompts', methods=['GET', 'POST', 'OPTIONS'])
-def manage_ai_prompts():
-    """Manage AI training prompts"""
-    if request.method == 'OPTIONS':
-        return '', 200
-    
-    try:
-        if request.method == 'GET':
-            logger.info("Getting AI prompts")
-            
-            # Mock AI prompts data
-            prompts = [
-                {
-                    'id': 1,
-                    'title': 'Stock Price Analysis',
-                    'category': 'stock_analysis',
-                    'prompt': 'Analyze the current stock price of {symbol} and provide insights on its performance.',
-                    'response_template': 'Based on my analysis of {symbol}, here are the key insights...',
-                    'tags': ['technical', 'fundamental'],
-                    'is_active': True,
-                    'created_at': '2024-01-01T00:00:00Z',
-                    'updated_at': '2024-01-01T00:00:00Z'
-                },
-                {
-                    'id': 2,
-                    'title': 'Trading Strategy Recommendation',
-                    'category': 'trading_strategy',
-                    'prompt': 'Recommend a trading strategy for {symbol} based on current market conditions.',
-                    'response_template': 'For {symbol}, I recommend the following strategy...',
-                    'tags': ['strategy', 'risk-management'],
-                    'is_active': True,
-                    'created_at': '2024-01-01T00:00:00Z',
-                    'updated_at': '2024-01-01T00:00:00Z'
-                },
-                {
-                    'id': 3,
-                    'title': 'Portfolio Performance Review',
-                    'category': 'portfolio_management',
-                    'prompt': 'Review the performance of my portfolio and provide recommendations.',
-                    'response_template': 'Based on your portfolio analysis, here are my recommendations...',
-                    'tags': ['portfolio', 'performance'],
-                    'is_active': True,
-                    'created_at': '2024-01-01T00:00:00Z',
-                    'updated_at': '2024-01-01T00:00:00Z'
-                }
-            ]
-            
-            return jsonify({
-                'success': True,
-                'prompts': prompts
-            })
-        
-        elif request.method == 'POST':
-            data = request.get_json()
-            logger.info(f"Creating AI prompt: {data}")
-            
-            # Mock prompt creation
-            new_prompt = {
-                'id': len(prompts) + 1,
-                'title': data.get('title', ''),
-                'category': data.get('category', 'general'),
-                'prompt': data.get('prompt', ''),
-                'response_template': data.get('response_template', ''),
-                'tags': data.get('tags', []),
-                'is_active': data.get('is_active', True),
-                'created_at': '2024-01-01T00:00:00Z',
-                'updated_at': '2024-01-01T00:00:00Z'
-            }
-            
-            return jsonify({
-                'success': True,
-                'message': 'AI prompt created successfully',
-                'prompt': new_prompt
-            })
-            
-    except Exception as e:
-        logger.error(f"Error managing AI prompts: {e}")
-        return jsonify({
-            'success': False,
-            'error': 'Failed to manage AI prompts'
-        }), 500
-
-@app.route('/api/admin/ai-prompts/<int:prompt_id>', methods=['PUT', 'DELETE', 'OPTIONS'])
-def manage_single_ai_prompt(prompt_id):
-    """Manage individual AI prompt"""
-    if request.method == 'OPTIONS':
-        return '', 200
-    
-    try:
-        if request.method == 'PUT':
-            data = request.get_json()
-            logger.info(f"Updating AI prompt {prompt_id}: {data}")
-            
-            # Mock prompt update
-            updated_prompt = {
-                'id': prompt_id,
-                'title': data.get('title', ''),
-                'category': data.get('category', 'general'),
-                'prompt': data.get('prompt', ''),
-                'response_template': data.get('response_template', ''),
-                'tags': data.get('tags', []),
-                'is_active': data.get('is_active', True),
-                'created_at': '2024-01-01T00:00:00Z',
-                'updated_at': '2024-01-01T00:00:00Z'
-            }
-            
-            return jsonify({
-                'success': True,
-                'message': 'AI prompt updated successfully',
-                'prompt': updated_prompt
-            })
-        
-        elif request.method == 'DELETE':
-            logger.info(f"Deleting AI prompt {prompt_id}")
-            
-            return jsonify({
-                'success': True,
-                'message': 'AI prompt deleted successfully'
-            })
-            
-    except Exception as e:
-        logger.error(f"Error managing AI prompt {prompt_id}: {e}")
-        return jsonify({
-            'success': False,
-            'error': 'Failed to manage AI prompt'
-        }), 500
 
 @app.route('/api/prediction/<symbol>', methods=['GET'])
 def get_prediction(symbol):
@@ -768,34 +641,6 @@ def get_sensitivity_analysis(symbol):
             'error': f'Failed to generate sensitivity analysis for symbol: {symbol}'
         }), 500
 
-@app.route('/api/marketmate/query', methods=['GET', 'POST'])
-def marketmate_query():
-    """Handle marketmate queries"""
-    try:
-        if request.method == 'GET':
-            query = request.args.get('q', '')
-        else:
-            data = request.get_json()
-            query = data.get('query', '')
-        
-        logger.info(f"Marketmate query: {query}")
-        
-        # Mock marketmate response
-        response = f"Based on current market conditions, {query} shows positive momentum. Consider monitoring key support and resistance levels."
-        
-        return jsonify({
-            'success': True,
-            'query': query,
-            'response': response,
-            'timestamp': '2024-01-01T00:00:00Z'
-        })
-        
-    except Exception as e:
-        logger.error(f"Error processing marketmate query: {e}")
-        return jsonify({
-            'success': False,
-            'error': 'Failed to process marketmate query'
-        }), 500
 
 @app.route('/api/day-trading/prediction/<symbol>', methods=['POST'])
 def day_trading_prediction(symbol):
@@ -1307,35 +1152,6 @@ def handle_watchlist():
             'error': 'Failed to handle watchlist operation'
         }), 500
 
-@app.route('/api/chat/query', methods=['POST'])
-def chat_query():
-    """Handle chat queries"""
-    try:
-        data = request.get_json()
-        query = data.get('query', '')
-        
-        logger.info(f"Chat query received: {query}")
-        
-        # Simple response based on query content
-        if 'price' in query.lower() or 'stock' in query.lower():
-            response = "I can help you with stock prices and market data. Please specify a stock symbol."
-        elif 'prediction' in query.lower() or 'forecast' in query.lower():
-            response = "I can provide AI-powered predictions for stocks. Please specify a stock symbol."
-        else:
-            response = "I'm an AI assistant for stock trading. I can help you with stock prices, predictions, and market analysis. What would you like to know?"
-        
-        return jsonify({
-            'success': True,
-            'response': response,
-            'query': query
-        })
-        
-    except Exception as e:
-        logger.error(f"Error processing chat query: {e}")
-        return jsonify({
-            'success': False,
-            'error': 'Failed to process chat query'
-        }), 500
 
 @app.route('/api/ai/gemini-query', methods=['POST', 'OPTIONS'])
 def gemini_query():
