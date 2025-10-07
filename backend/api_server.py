@@ -36,7 +36,7 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 try:
     from gemini_predictor import GeminiStockPredictor
 except ImportError as e:
-    logger.warning(f"Could not import GeminiStockPredictor: {e}")
+    print(f"Warning: Could not import GeminiStockPredictor: {e}")
     GeminiStockPredictor = None
 try:
     from portfolio_manager import PortfolioManager, SignalType, AssetType
