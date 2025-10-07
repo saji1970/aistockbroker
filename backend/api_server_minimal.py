@@ -1374,6 +1374,8 @@ def gemini_query():
             intent = 'compare_metrics'
         elif any(word in query_lower for word in ['predict', 'forecast', 'prediction', 'will']):
             intent = 'technical_analysis'
+        elif any(word in query_lower for word in ['analyze', 'analysis', 'technical', 'technically', 'trend', 'chart']):
+            intent = 'technical_analysis'
         elif any(word in query_lower for word in ['explain', 'what is', 'how does', 'teach']):
             intent = 'financial_education'
         elif any(word in query_lower for word in ['sentiment', 'feeling', 'mood', 'opinion']):
