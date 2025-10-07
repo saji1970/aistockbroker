@@ -54,7 +54,7 @@ try:
     from middleware.auth_middleware import require_auth
     from services.portfolio_service import PortfolioService
 except ImportError as e:
-    logger.warning(f"Could not import some modules: {e}")
+    print(f"Warning: Could not import some modules: {e}")
     # Set defaults for missing modules
     PortfolioManager = None
     EnhancedPortfolioManager = None
