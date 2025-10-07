@@ -7,8 +7,11 @@ API endpoints for agent operations, customer management, and trading suggestions
 import os
 import sys
 import asyncio
+import logging
 from flask import Blueprint, request, jsonify
 from functools import wraps
+
+logger = logging.getLogger(__name__)
 
 # Add current directory to path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -129,11 +132,15 @@ def approve_suggestion(suggestion_id):
         data = request.get_json() or {}
         notes = data.get('notes', '')
 
+        logger.info(f"Agent {agent_id} attempting to approve suggestion {suggestion_id}")
         result = agent_service.approve_suggestion(suggestion_id, agent_id, notes)
+        logger.info(f"Suggestion {suggestion_id} approved successfully by agent {agent_id}")
         return jsonify(result)
     except ValueError as e:
+        logger.warning(f"Validation error approving suggestion {suggestion_id}: {str(e)}")
         return jsonify({'error': str(e)}), 404
     except Exception as e:
+        logger.error(f"Error approving suggestion {suggestion_id}: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
 @agent_bp.route('/suggestions/<int:suggestion_id>/reject', methods=['POST'])
@@ -146,11 +153,15 @@ def reject_suggestion(suggestion_id):
         data = request.get_json() or {}
         reason = data.get('reason', 'No reason provided')
 
+        logger.info(f"Agent {agent_id} attempting to reject suggestion {suggestion_id}")
         result = agent_service.reject_suggestion(suggestion_id, agent_id, reason)
+        logger.info(f"Suggestion {suggestion_id} rejected successfully by agent {agent_id}")
         return jsonify(result)
     except ValueError as e:
+        logger.warning(f"Validation error rejecting suggestion {suggestion_id}: {str(e)}")
         return jsonify({'error': str(e)}), 404
     except Exception as e:
+        logger.error(f"Error rejecting suggestion {suggestion_id}: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
 @agent_bp.route('/customers/<int:customer_id>/interactions', methods=['GET'])

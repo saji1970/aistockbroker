@@ -82,6 +82,100 @@ logger.info(f"Python path: {sys.path}")
 logger.info(f"Working directory: {os.getcwd()}")
 logger.info(f"Environment variables: FLASK_ENV={os.environ.get('FLASK_ENV')}, PORT={os.environ.get('PORT')}")
 
+def generate_default_ai_response(query):
+    """Generate a default AI response when Gemini is not available"""
+    query_lower = query.lower()
+    
+    if any(word in query_lower for word in ['price', 'stock', 'market', 'quote']):
+        return f"""I can help you with stock analysis! However, I'm currently running in demo mode without full AI capabilities.
+
+**What I can help you with:**
+- Stock price information
+- Market analysis
+- Trading strategies
+- Portfolio management
+
+**To get real-time AI analysis, please:**
+1. Configure your Google API key for Gemini
+2. Ask specific questions about stocks like "What's the price of AAPL?"
+3. Request market analysis or trading strategies
+
+**Example queries:**
+- "What's the current price of TSLA?"
+- "Analyze the tech sector"
+- "Give me a trading strategy for MSFT"
+
+Would you like me to help you with any specific stock analysis?"""
+    
+    elif any(word in query_lower for word in ['predict', 'forecast', 'prediction']):
+        return f"""I can provide AI-powered stock predictions! However, I'm currently running in demo mode.
+
+**Prediction capabilities when fully configured:**
+- Price direction forecasts
+- Technical analysis predictions
+- Market sentiment analysis
+- Risk assessment
+- Trading recommendations
+
+**To get AI predictions:**
+1. Set up your Google API key
+2. Ask specific prediction questions
+3. Request analysis for specific stocks
+
+**Example prediction queries:**
+- "Predict AAPL direction for tomorrow"
+- "What's the forecast for TSLA?"
+- "Get prediction for MSFT stock"
+
+Would you like me to help you with any specific prediction analysis?"""
+    
+    elif any(word in query_lower for word in ['trading', 'strategy', 'trade']):
+        return f"""I can provide trading strategies and analysis! Currently running in demo mode.
+
+**Trading capabilities when fully configured:**
+- Day trading strategies
+- Swing trading approaches
+- Risk management techniques
+- Entry/exit point analysis
+- Position sizing recommendations
+
+**To get trading strategies:**
+1. Configure your AI model access
+2. Ask specific trading questions
+3. Request strategies for specific stocks
+
+**Example trading queries:**
+- "Day trading strategy for MSFT"
+- "Trading analysis for AAPL"
+- "Get trade signals for TSLA"
+
+Would you like me to help you with any specific trading analysis?"""
+    
+    else:
+        return f"""I'm your AI Stock Trading Assistant! 🤖 
+
+**Current Status:** Running in demo mode
+
+**What I can help you with:**
+📈 **Stock Information** - Current prices and market data
+🔮 **AI Predictions** - Price direction forecasts  
+🎯 **Trading Strategies** - Day trading opportunities
+📊 **Portfolio Analysis** - Performance tracking
+🧠 **Market Insights** - Sentiment and trend analysis
+
+**To get full AI capabilities:**
+1. Configure your Google API key for Gemini
+2. Ask specific questions about stocks
+3. Request market analysis or predictions
+
+**Try asking me:**
+- "What's the price of AAPL?"
+- "Predict TSLA direction for tomorrow" 
+- "Day trading strategy for MSFT"
+- "Analyze my portfolio risk"
+
+What would you like to know about the stock market?"""
+
 def generate_mock_prediction(symbol):
     """Generate a mock prediction when AI service is not available - ALWAYS returns valid data."""
     try:
@@ -2787,18 +2881,33 @@ def start_trading_bot():
         watchlist = config.get('watchlist', ['AAPL', 'TSLA', 'MSFT', 'GOOGL', 'NVDA'])
         interval = config.get('interval', 300)
 
-        # Create enhanced trading bot
-        trading_bot_instance = ShadowTradingBot(
-            initial_capital=initial_capital,
-            target_amount=target_amount,
-            trading_strategy=strategy,
-            enable_ml_learning=True,
-            milestone_target_percent=target_percent
-        )
+        # Create enhanced trading bot with error handling
+        try:
+            trading_bot_instance = ShadowTradingBot(
+                initial_capital=initial_capital,
+                target_amount=target_amount,
+                trading_strategy=strategy,
+                enable_ml_learning=True,
+                milestone_target_percent=target_percent
+            )
+        except Exception as bot_init_error:
+            logger.error(f"Failed to initialize ShadowTradingBot: {bot_init_error}")
+            # Fallback to basic configuration
+            trading_bot_instance = ShadowTradingBot(
+                initial_capital=initial_capital,
+                target_amount=target_amount,
+                trading_strategy='basic',
+                enable_ml_learning=False,
+                milestone_target_percent=target_percent
+            )
 
-        # Add watchlist symbols
+        # Add watchlist symbols with error handling
         for symbol in watchlist:
-            trading_bot_instance.add_to_watchlist(symbol)
+            try:
+                trading_bot_instance.add_to_watchlist(symbol)
+            except Exception as e:
+                logger.warning(f"Failed to add {symbol} to watchlist: {e}")
+                continue
 
         # Schedule daily evaluation
         trading_bot_instance.schedule_daily_evaluation(hour=16)
@@ -2988,6 +3097,78 @@ def get_trading_bot_orders():
     except Exception as e:
         logger.error(f"Error getting bot orders: {e}")
         return jsonify({'error': str(e)}), 500
+
+@app.route('/api/ai/gemini-query', methods=['POST', 'OPTIONS'])
+def gemini_query():
+    """Handle AI queries using Gemini model for stock analysis"""
+    if request.method == 'OPTIONS':
+        return jsonify({'status': 'ok'}), 200
+    
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({'error': 'No JSON data provided'}), 400
+        
+        query = data.get('query', '')
+        temperature = data.get('temperature', 0.7)
+        max_tokens = data.get('maxTokens', 2048)
+        market = data.get('market', 'US')
+        
+        if not query:
+            return jsonify({'error': 'Query is required'}), 400
+        
+        # Initialize Gemini predictor if available
+        if GeminiStockPredictor and Config and Config.GOOGLE_API_KEY:
+            try:
+                predictor = GeminiStockPredictor()
+                if hasattr(predictor, 'model') and predictor.model:
+                    # Use Gemini for natural language processing
+                    result = predictor.process_natural_language_query(query)
+                    
+                    return jsonify({
+                        'response': result.get('response', 'No response generated'),
+                        'query_type': result.get('query_type', 'general'),
+                        'confidence': result.get('confidence', 0.7),
+                        'model_used': 'Gemini 1.5 Pro',
+                        'timestamp': datetime.now().isoformat()
+                    })
+                else:
+                    logger.warning("Gemini model not initialized properly")
+                    return jsonify({
+                        'response': generate_default_ai_response(query),
+                        'query_type': 'general',
+                        'confidence': 0.5,
+                        'model_used': 'Fallback Response',
+                        'timestamp': datetime.now().isoformat()
+                    })
+            except Exception as e:
+                logger.error(f"Gemini query processing error: {e}")
+                return jsonify({
+                    'response': generate_default_ai_response(query),
+                    'query_type': 'general',
+                    'confidence': 0.5,
+                    'model_used': 'Fallback Response',
+                    'error': str(e),
+                    'timestamp': datetime.now().isoformat()
+                })
+        else:
+            logger.warning("Gemini not available, using fallback response")
+            return jsonify({
+                'response': generate_default_ai_response(query),
+                'query_type': 'general',
+                'confidence': 0.5,
+                'model_used': 'Fallback Response',
+                'timestamp': datetime.now().isoformat()
+            })
+    
+    except Exception as e:
+        logger.error(f"Error processing Gemini query: {e}")
+        return jsonify({
+            'error': f'Internal server error: {str(e)}',
+            'response': 'I apologize, but I encountered an error processing your request. Please try again.',
+            'model_used': 'Error Handler',
+            'timestamp': datetime.now().isoformat()
+        }), 500
 
 @app.route('/api/marketmate/query', methods=['POST', 'OPTIONS'])
 def marketmate_query():

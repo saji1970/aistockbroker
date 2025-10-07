@@ -56,7 +56,7 @@ const AIAssistant = () => {
   const [isTyping, setIsTyping] = useState(false);
   const [streamingMessage, setStreamingMessage] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedModel, setSelectedModel] = useState('gpt-4');
+  const [selectedModel, setSelectedModel] = useState('gemini-1.5-pro');
   const [temperature, setTemperature] = useState(0.7);
   const [maxTokens, setMaxTokens] = useState(2048);
   
@@ -154,7 +154,7 @@ const AIAssistant = () => {
       setCurrentChatId(chatId);
       setMessages(chat.messages || []);
       setSidebarOpen(false);
-      setSelectedModel(chat.model || 'gpt-4');
+      setSelectedModel(chat.model || 'gemini-1.5-pro');
       setTemperature(chat.temperature || 0.7);
       setMaxTokens(chat.maxTokens || 2048);
     }
@@ -355,12 +355,40 @@ Please try again with a valid stock symbol like AAPL, MSFT, or GOOGL.`;
 - "What are the current market trends?"
 - "Get market sentiment analysis"`;
       } else {
-        // General market mate response
-        try {
-          const marketResponse = await marketMateAPI.query(messageContent);
-          response = marketResponse.message || generateDefaultResponse(messageContent);
-        } catch (error) {
-          response = generateDefaultResponse(messageContent);
+        // Use Gemini for general stock analysis when Gemini model is selected
+        if (selectedModel === 'gemini-1.5-pro') {
+          try {
+            const geminiResponse = await fetch('/api/ai/gemini-query', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                query: messageContent,
+                temperature: temperature,
+                maxTokens: maxTokens,
+                market: currentMarket
+              })
+            });
+            
+            if (geminiResponse.ok) {
+              const geminiData = await geminiResponse.json();
+              response = geminiData.response || geminiData.message || generateDefaultResponse(messageContent);
+            } else {
+              response = generateDefaultResponse(messageContent);
+            }
+          } catch (error) {
+            console.error('Gemini API error:', error);
+            response = generateDefaultResponse(messageContent);
+          }
+        } else {
+          // General market mate response for other models
+          try {
+            const marketResponse = await marketMateAPI.query(messageContent);
+            response = marketResponse.message || generateDefaultResponse(messageContent);
+          } catch (error) {
+            response = generateDefaultResponse(messageContent);
+          }
         }
       }
 
@@ -752,6 +780,7 @@ What would you like to know about the stock market?`;
                         : 'bg-white border-gray-300 text-gray-900'
                     }`}
                   >
+                    <option value="gemini-1.5-pro">Gemini 1.5 Pro (Stock Expert)</option>
                     <option value="gpt-4">GPT-4</option>
                     <option value="gpt-3.5-turbo">GPT-3.5 Turbo</option>
                     <option value="claude-3">Claude 3</option>

@@ -24,8 +24,18 @@ class GeminiStockPredictor:
         if Config.GOOGLE_API_KEY:
             try:
                 genai.configure(api_key=Config.GOOGLE_API_KEY)
-                self.model = genai.GenerativeModel(Config.GEMINI_MODEL)
-                logger.info("✅ Gemini model initialized successfully")
+                # Configure generation settings for optimal stock analysis
+                generation_config = genai.types.GenerationConfig(
+                    temperature=Config.TEMPERATURE,
+                    top_p=Config.TOP_P,
+                    top_k=Config.TOP_K,
+                    max_output_tokens=Config.MAX_TOKENS,
+                )
+                self.model = genai.GenerativeModel(
+                    Config.GEMINI_MODEL,
+                    generation_config=generation_config
+                )
+                logger.info("✅ Gemini model initialized successfully with optimized stock analysis settings")
             except Exception as e:
                 logger.error(f"❌ Failed to initialize Gemini model: {e}")
                 self.model = None
@@ -33,9 +43,223 @@ class GeminiStockPredictor:
             logger.warning("⚠️ No Google API key found. AI features will be limited.")
 
     def process_natural_language_query(self, query: str) -> Dict:
-        """Process natural language queries and return appropriate responses."""
+        """Process natural language queries with comprehensive NLP capabilities."""
         query_lower = query.lower()
         
+        # Enhanced intent recognition and entity extraction
+        intent_result = self._analyze_intent_and_entities(query)
+        intent = intent_result['intent']
+        entities = intent_result['entities']
+        
+        # Route to appropriate handler based on intent
+        if intent == 'get_price_quote':
+            return self._handle_price_quote_query(query, entities)
+        elif intent == 'summarize_earnings':
+            return self._handle_earnings_query(query, entities)
+        elif intent == 'compare_metrics':
+            return self._handle_comparison_query(query, entities)
+        elif intent == 'macroeconomic_impact':
+            return self._handle_macroeconomic_query(query, entities)
+        elif intent == 'financial_education':
+            return self._handle_education_query(query, entities)
+        elif intent == 'sentiment_analysis':
+            return self._handle_sentiment_query(query, entities)
+        elif intent == 'document_summarization':
+            return self._handle_document_query(query, entities)
+        elif intent == 'trading_workflow':
+            return self._handle_trading_workflow_query(query, entities)
+        elif intent == 'technical_analysis':
+            return self._handle_technical_analysis_query(query, entities)
+        elif intent == 'risk_assessment':
+            return self._handle_risk_assessment_query(query, entities)
+        else:
+            # Fallback to original logic for backward compatibility
+            return self._process_legacy_query(query_lower)
+    
+    def _analyze_intent_and_entities(self, query: str) -> Dict:
+        """Analyze intent and extract entities from natural language query."""
+        query_lower = query.lower()
+        entities = {}
+        
+        # Extract stock tickers and company names
+        tickers = self._extract_tickers(query)
+        if tickers:
+            entities['tickers'] = tickers
+        
+        # Extract time periods
+        time_periods = self._extract_time_periods(query)
+        if time_periods:
+            entities['time_periods'] = time_periods
+        
+        # Extract financial metrics
+        metrics = self._extract_financial_metrics(query)
+        if metrics:
+            entities['metrics'] = metrics
+        
+        # Extract sectors and industries
+        sectors = self._extract_sectors(query)
+        if sectors:
+            entities['sectors'] = sectors
+        
+        # Intent classification
+        intent = self._classify_intent(query_lower)
+        
+        return {
+            'intent': intent,
+            'entities': entities,
+            'confidence': 0.9
+        }
+    
+    def _extract_tickers(self, query: str) -> List[str]:
+        """Extract stock tickers from query."""
+        import re
+        query_upper = query.upper()
+        
+        # Common stock symbols
+        common_symbols = [
+            'AAPL', 'TSLA', 'MSFT', 'GOOGL', 'AMZN', 'META', 'NVDA', 'NFLX', 'AMD', 'INTC',
+            'SPY', 'QQQ', 'VOO', 'VTI', 'DAL', 'UAL', 'AAL', 'LUV', 'JBLU', 'JPM', 'BAC',
+            'WMT', 'JNJ', 'PG', 'KO', 'PFE', 'ABBV', 'MRK', 'UNH', 'HD', 'LOW', 'DIS',
+            'NKE', 'SBUX', 'MCD', 'BA', 'CAT', 'GE', 'IBM', 'CSCO', 'ORCL', 'CRM'
+        ]
+        
+        found_tickers = []
+        for symbol in common_symbols:
+            if symbol in query_upper:
+                found_tickers.append(symbol)
+        
+        # Also check for company names that might be mentioned
+        company_mappings = {
+            'apple': 'AAPL', 'tesla': 'TSLA', 'microsoft': 'MSFT', 'google': 'GOOGL',
+            'amazon': 'AMZN', 'meta': 'META', 'facebook': 'META', 'nvidia': 'NVDA',
+            'netflix': 'NFLX', 'amd': 'AMD', 'intel': 'INTC', 'boeing': 'BA',
+            'caterpillar': 'CAT', 'general electric': 'GE', 'ibm': 'IBM',
+            'cisco': 'CSCO', 'oracle': 'ORCL', 'salesforce': 'CRM'
+        }
+        
+        for company, ticker in company_mappings.items():
+            if company in query_lower and ticker not in found_tickers:
+                found_tickers.append(ticker)
+        
+        return found_tickers
+    
+    def _extract_time_periods(self, query: str) -> List[str]:
+        """Extract time periods from query."""
+        import re
+        query_lower = query.lower()
+        
+        time_patterns = [
+            r'\b(q[1-4]\s*\d{4})\b',  # Q1 2024, Q4 2023
+            r'\b(\d{4})\b',  # 2024, 2023
+            r'\b(past\s+year|last\s+year)\b',
+            r'\b(past\s+month|last\s+month)\b',
+            r'\b(past\s+week|last\s+week)\b',
+            r'\b(yesterday|today|tomorrow)\b',
+            r'\b(recent|latest|current)\b'
+        ]
+        
+        time_periods = []
+        for pattern in time_patterns:
+            matches = re.findall(pattern, query_lower)
+            time_periods.extend(matches)
+        
+        return time_periods
+    
+    def _extract_financial_metrics(self, query: str) -> List[str]:
+        """Extract financial metrics from query."""
+        query_lower = query.lower()
+        
+        metrics = []
+        metric_keywords = [
+            'pe ratio', 'p/e ratio', 'price to earnings', 'earnings per share', 'eps',
+            'revenue', 'profit', 'margin', 'debt', 'equity', 'market cap', 'market capitalization',
+            'dividend', 'yield', 'beta', 'volatility', 'rsi', 'macd', 'moving average',
+            'support', 'resistance', 'volume', 'liquidity'
+        ]
+        
+        for metric in metric_keywords:
+            if metric in query_lower:
+                metrics.append(metric)
+        
+        return metrics
+    
+    def _extract_sectors(self, query: str) -> List[str]:
+        """Extract sectors and industries from query."""
+        query_lower = query.lower()
+        
+        sectors = []
+        sector_keywords = [
+            'tech', 'technology', 'bank', 'banking', 'financial', 'healthcare', 'pharmaceutical',
+            'energy', 'oil', 'gas', 'retail', 'consumer', 'automotive', 'airline', 'travel',
+            'real estate', 'reit', 'utilities', 'telecommunications', 'media', 'entertainment'
+        ]
+        
+        for sector in sector_keywords:
+            if sector in query_lower:
+                sectors.append(sector)
+        
+        return sectors
+    
+    def _classify_intent(self, query_lower: str) -> str:
+        """Classify the intent of the user query."""
+        
+        # Intent patterns
+        intent_patterns = {
+            'get_price_quote': [
+                'price', 'quote', 'current price', 'stock price', 'trading at', 'worth'
+            ],
+            'summarize_earnings': [
+                'earnings', 'quarterly', 'q1', 'q2', 'q3', 'q4', 'revenue', 'profit', 'eps'
+            ],
+            'compare_metrics': [
+                'compare', 'vs', 'versus', 'better', 'worse', 'similar', 'difference'
+            ],
+            'macroeconomic_impact': [
+                'interest rate', 'inflation', 'fed', 'federal reserve', 'economic', 'gdp',
+                'unemployment', 'cpi', 'ppi', 'macroeconomic'
+            ],
+            'financial_education': [
+                'explain', 'what is', 'how does', 'concept', 'definition', 'dollar cost averaging',
+                'dca', 'diversification', 'risk', 'volatility'
+            ],
+            'sentiment_analysis': [
+                'sentiment', 'mood', 'feeling', 'reaction', 'impact', 'news', 'headline',
+                'social media', 'twitter', 'reddit'
+            ],
+            'document_summarization': [
+                'summarize', 'summary', 'transcript', 'filing', 'report', 'document',
+                '10-k', '10-q', 'earnings call'
+            ],
+            'trading_workflow': [
+                'checklist', 'pre-market', 'post-market', 'trade log', 'journal',
+                'support', 'resistance', 'breakout', 'breakdown'
+            ],
+            'technical_analysis': [
+                'technical', 'chart', 'pattern', 'rsi', 'macd', 'bollinger', 'moving average',
+                'head and shoulders', 'double top', 'double bottom'
+            ],
+            'risk_assessment': [
+                'risk', 'volatility', 'beta', 'downside', 'upside', 'drawdown', 'var'
+            ]
+        }
+        
+        # Score each intent
+        intent_scores = {}
+        for intent, patterns in intent_patterns.items():
+            score = 0
+            for pattern in patterns:
+                if pattern in query_lower:
+                    score += 1
+            intent_scores[intent] = score
+        
+        # Return intent with highest score
+        if intent_scores:
+            return max(intent_scores, key=intent_scores.get)
+        else:
+            return 'general_query'
+    
+    def _process_legacy_query(self, query_lower: str) -> Dict:
+        """Process query using legacy logic for backward compatibility."""
         # Financial planning keywords - delegate to api_server.py
         financial_planning_keywords = [
             'financial plan', 'financial planning', 'retirement plan', 'retirement planning',
@@ -395,17 +619,37 @@ class GeminiStockPredictor:
             
             response = self.model.generate_content(prompt)
             
+            # Format response to match expected API structure
+            prediction_text = response.text if response and response.text else 'Unable to generate prediction'
+            
+            # Extract key information for structured response
+            direction = "Bullish" if lstm_analysis['trend_direction'] in ["Strong Bullish", "Bullish"] else "Bearish" if lstm_analysis['trend_direction'] in ["Strong Bearish", "Bearish"] else "Neutral"
+            confidence = lstm_analysis['confidence']
+            
+            # Calculate target price based on prediction factor
+            prediction_factor = lstm_analysis['prediction_factor'] / 100
+            target_price = current_price * (1 + prediction_factor)
+            
             return {
                 'symbol': symbol,
-                'prediction': response.text if response and response.text else 'Unable to generate prediction',
-                'confidence': lstm_analysis['confidence'],
+                'prediction': {
+                    'direction': direction,
+                    'confidence': confidence,
+                    'target_price': round(target_price, 2),
+                    'timeframe': timeframe,
+                    'technical_analysis': f"RSI: {rsi:.1f}, Volatility: {volatility:.2%}, Trend: {lstm_analysis['trend_direction']}",
+                    'fundamental_analysis': f"Price vs 20-day SMA: {'Above' if current_price > sma_20 else 'Below'}, Price vs 50-day SMA: {'Above' if current_price > sma_50 else 'Below'}",
+                    'risk_level': 'High' if volatility > 0.3 else 'Medium' if volatility > 0.15 else 'Low',
+                    'detailed_analysis': prediction_text
+                },
+                'current_price': round(current_price, 2),
                 'lstm_analysis': lstm_analysis,
                 'technical_indicators': {
-                    'current_price': current_price,
-                    'sma_20': sma_20,
-                    'sma_50': sma_50,
-                    'rsi': rsi,
-                    'volatility': volatility
+                    'current_price': round(current_price, 2),
+                    'sma_20': round(sma_20, 2),
+                    'sma_50': round(sma_50, 2),
+                    'rsi': round(rsi, 2),
+                    'volatility': round(volatility, 4)
                 },
                 'sensitivity_analysis': sensitivity_result,
                 'timestamp': datetime.now().isoformat()
@@ -895,6 +1139,803 @@ class GeminiStockPredictor:
             'query_type': 'holdings_valuation',
             'confidence': 0.7
         }
+    
+    # Enhanced NLP Handler Methods
+    
+    def _handle_price_quote_query(self, query: str, entities: Dict) -> Dict:
+        """Handle price quote requests with enhanced NLP."""
+        tickers = entities.get('tickers', [])
+        if tickers:
+            symbol = tickers[0]
+            try:
+                if hasattr(self, 'data_fetcher') and self.data_fetcher:
+                    stock_data = self.data_fetcher.fetch_stock_data(symbol, period='5d')
+                    if stock_data is not None and not stock_data.empty:
+                        current_price = stock_data['Close'].iloc[-1]
+                        price_change = stock_data['Close'].iloc[-1] - stock_data['Close'].iloc[-2]
+                        price_change_pct = (price_change / stock_data['Close'].iloc[-2]) * 100
+                        
+                        # Enhanced response with NLP insights
+                        response = f"""📊 **{symbol} Current Stock Quote**
+
+**Current Price:** ${current_price:.2f}
+**Daily Change:** ${price_change:.2f} ({price_change_pct:+.2f}%)
+**Last Updated:** {stock_data.index[-1].strftime('%Y-%m-%d %H:%M')}
+
+**Market Context:**
+- **Trend:** {'Bullish' if price_change > 0 else 'Bearish' if price_change < 0 else 'Neutral'}
+- **Volume:** {'Above Average' if stock_data['Volume'].iloc[-1] > stock_data['Volume'].mean() else 'Below Average'}
+- **Volatility:** {self._calculate_volatility_status(stock_data)}
+
+**Key Insights:**
+{self._generate_price_insights(symbol, current_price, price_change_pct)}
+
+*Real-time market data for {symbol}*"""
+                        
+                        return {
+                            'response': response,
+                            'query_type': 'price_quote',
+                            'confidence': 0.95,
+                            'entities': entities,
+                            'intent': 'get_price_quote'
+                        }
+            except Exception as e:
+                logger.error(f"Error getting price quote for {symbol}: {e}")
+        
+        return {
+            'response': f"I can provide current stock prices for any symbol. Please specify a stock ticker like 'AAPL' or 'Tesla' for real-time pricing information.",
+            'query_type': 'price_quote',
+            'confidence': 0.7,
+            'entities': entities,
+            'intent': 'get_price_quote'
+        }
+    
+    def _handle_earnings_query(self, query: str, entities: Dict) -> Dict:
+        """Handle earnings analysis requests."""
+        tickers = entities.get('tickers', [])
+        time_periods = entities.get('time_periods', [])
+        
+        if not self.model:
+            return {
+                'response': "I can analyze earnings reports and quarterly results. However, I need to be configured with AI capabilities to provide detailed earnings analysis. Please configure the Google API key for enhanced earnings insights.",
+                'query_type': 'earnings_analysis',
+                'confidence': 0.5,
+                'entities': entities,
+                'intent': 'summarize_earnings'
+            }
+        
+        try:
+            # Create comprehensive earnings analysis prompt
+            symbol = tickers[0] if tickers else 'AAPL'
+            timeframe = time_periods[0] if time_periods else 'latest quarter'
+            
+            prompt = f"""You are an expert financial analyst specializing in earnings analysis. Analyze the {timeframe} earnings for {symbol}.
+
+Please provide a comprehensive earnings analysis including:
+
+**📈 Key Financial Metrics:**
+- Revenue growth and trends
+- Earnings per share (EPS) performance
+- Profit margins and efficiency
+- Cash flow analysis
+
+**📊 Comparative Analysis:**
+- Year-over-year comparisons
+- Quarter-over-quarter trends
+- Industry benchmarking
+- Consensus expectations vs actual results
+
+**🎯 Forward Guidance:**
+- Management outlook and guidance
+- Key growth drivers
+- Risk factors and challenges
+- Strategic initiatives
+
+**📰 Market Reaction:**
+- Expected market response
+- Analyst sentiment
+- Price target implications
+- Investment thesis impact
+
+**⚠️ Risk Assessment:**
+- Key risks and uncertainties
+- Competitive pressures
+- Regulatory considerations
+- Macroeconomic factors
+
+Format your response with clear sections, specific data points, and actionable insights for investors."""
+            
+            response = self.model.generate_content(prompt)
+            
+            return {
+                'response': response.text if response and response.text else f"Earnings analysis for {symbol} is currently unavailable. Please try again later.",
+                'query_type': 'earnings_analysis',
+                'confidence': 0.85,
+                'entities': entities,
+                'intent': 'summarize_earnings'
+            }
+            
+        except Exception as e:
+            logger.error(f"Error in earnings analysis: {e}")
+            return {
+                'response': f"I encountered an error analyzing earnings for {symbol}. Please try again or check if the symbol is correct.",
+                'query_type': 'earnings_analysis',
+                'confidence': 0.6,
+                'entities': entities,
+                'intent': 'summarize_earnings'
+            }
+    
+    def _handle_comparison_query(self, query: str, entities: Dict) -> Dict:
+        """Handle comparison requests between stocks or metrics."""
+        tickers = entities.get('tickers', [])
+        metrics = entities.get('metrics', [])
+        
+        if len(tickers) < 2:
+            return {
+                'response': "I can compare stocks and financial metrics. Please specify two or more stocks to compare, such as 'Compare AAPL and MSFT' or 'Compare the P/E ratios of tech stocks'.",
+                'query_type': 'comparison',
+                'confidence': 0.7,
+                'entities': entities,
+                'intent': 'compare_metrics'
+            }
+        
+        try:
+            if not self.model:
+                return {
+                    'response': f"I can compare {', '.join(tickers)} stocks. However, I need AI capabilities to provide detailed comparative analysis. Please configure the Google API key for enhanced comparison insights.",
+                    'query_type': 'comparison',
+                    'confidence': 0.5,
+                    'entities': entities,
+                    'intent': 'compare_metrics'
+                }
+            
+            # Create comparison analysis prompt
+            metric_focus = metrics[0] if metrics else 'comprehensive metrics'
+            symbols_text = ' vs '.join(tickers)
+            
+            prompt = f"""You are an expert financial analyst. Perform a comprehensive comparison of {symbols_text} focusing on {metric_focus}.
+
+Please provide a detailed comparative analysis including:
+
+**📊 Financial Metrics Comparison:**
+- P/E ratios and valuation
+- Revenue and growth rates
+- Profit margins and efficiency
+- Debt levels and financial health
+- Market capitalization
+
+**📈 Performance Analysis:**
+- Stock price performance (1M, 3M, 1Y)
+- Volatility and risk metrics
+- Dividend yields and returns
+- Beta and market correlation
+
+**🎯 Investment Analysis:**
+- Relative value assessment
+- Growth potential comparison
+- Risk-return profiles
+- Sector positioning and advantages
+
+**📰 Market Sentiment:**
+- Analyst ratings and targets
+- Recent news and developments
+- Institutional ownership
+- Trading volume patterns
+
+**💡 Investment Recommendation:**
+- Which stock appears more attractive and why
+- Risk considerations for each
+- Suitable investor profiles
+- Portfolio allocation suggestions
+
+Format your response with clear comparisons, specific data points, and actionable investment insights."""
+            
+            response = self.model.generate_content(prompt)
+            
+            return {
+                'response': response.text if response and response.text else f"Comparison analysis for {symbols_text} is currently unavailable.",
+                'query_type': 'comparison',
+                'confidence': 0.85,
+                'entities': entities,
+                'intent': 'compare_metrics'
+            }
+            
+        except Exception as e:
+            logger.error(f"Error in comparison analysis: {e}")
+            return {
+                'response': f"I encountered an error comparing the requested stocks. Please try again.",
+                'query_type': 'comparison',
+                'confidence': 0.6,
+                'entities': entities,
+                'intent': 'compare_metrics'
+            }
+    
+    def _handle_macroeconomic_query(self, query: str, entities: Dict) -> Dict:
+        """Handle macroeconomic impact analysis."""
+        sectors = entities.get('sectors', [])
+        
+        if not self.model:
+            return {
+                'response': "I can analyze macroeconomic impacts on markets and sectors. However, I need AI capabilities to provide detailed economic analysis. Please configure the Google API key for enhanced macroeconomic insights.",
+                'query_type': 'macroeconomic_analysis',
+                'confidence': 0.5,
+                'entities': entities,
+                'intent': 'macroeconomic_impact'
+            }
+        
+        try:
+            # Create macroeconomic analysis prompt
+            sector_focus = sectors[0] if sectors else 'the overall market'
+            
+            prompt = f"""You are an expert macroeconomic analyst. Analyze the current macroeconomic environment and its impact on {sector_focus}.
+
+Please provide a comprehensive macroeconomic analysis including:
+
+**📊 Current Economic Indicators:**
+- GDP growth and trends
+- Inflation rates and expectations
+- Employment and unemployment data
+- Consumer confidence and spending
+
+**🏦 Monetary Policy Analysis:**
+- Federal Reserve policy stance
+- Interest rate environment
+- Quantitative easing/tightening
+- Currency and exchange rate impacts
+
+**🌍 Global Economic Factors:**
+- International trade dynamics
+- Geopolitical considerations
+- Global growth trends
+- Emerging market conditions
+
+**📈 Market Impact Assessment:**
+- Sector-specific implications
+- Asset class performance
+- Risk-on vs risk-off sentiment
+- Investment flow patterns
+
+**🎯 Investment Implications:**
+- Sector rotation opportunities
+- Defensive vs cyclical positioning
+- Fixed income vs equity considerations
+- International diversification benefits
+
+**⚠️ Risk Factors:**
+- Economic recession indicators
+- Policy uncertainty risks
+- Global trade tensions
+- Inflation/deflation scenarios
+
+Format your response with clear analysis, specific data points, and actionable investment strategies."""
+            
+            response = self.model.generate_content(prompt)
+            
+            return {
+                'response': response.text if response and response.text else f"Macroeconomic analysis is currently unavailable. Please try again later.",
+                'query_type': 'macroeconomic_analysis',
+                'confidence': 0.85,
+                'entities': entities,
+                'intent': 'macroeconomic_impact'
+            }
+            
+        except Exception as e:
+            logger.error(f"Error in macroeconomic analysis: {e}")
+            return {
+                'response': f"I encountered an error analyzing macroeconomic factors. Please try again.",
+                'query_type': 'macroeconomic_analysis',
+                'confidence': 0.6,
+                'entities': entities,
+                'intent': 'macroeconomic_impact'
+            }
+    
+    def _handle_education_query(self, query: str, entities: Dict) -> Dict:
+        """Handle financial education requests."""
+        if not self.model:
+            return {
+                'response': "I can explain financial concepts and provide educational content. However, I need AI capabilities to provide detailed explanations. Please configure the Google API key for enhanced educational insights.",
+                'query_type': 'financial_education',
+                'confidence': 0.5,
+                'entities': entities,
+                'intent': 'financial_education'
+            }
+        
+        try:
+            prompt = f"""You are an expert financial educator. Provide a comprehensive explanation of the financial concept mentioned in this query: "{query}"
+
+Please structure your response with:
+
+**📚 Concept Definition:**
+- Clear, simple definition
+- Key characteristics and components
+- Real-world examples and applications
+
+**📊 How It Works:**
+- Step-by-step explanation
+- Mathematical formulas (if applicable)
+- Visual analogies for complex concepts
+
+**💡 Practical Applications:**
+- How investors use this concept
+- Real-world trading strategies
+- Portfolio management implications
+
+**📈 Examples and Case Studies:**
+- Historical examples
+- Current market applications
+- Success and failure stories
+
+**⚠️ Important Considerations:**
+- Risks and limitations
+- Common misconceptions
+- When to use or avoid
+
+**🎯 Key Takeaways:**
+- Main points to remember
+- Action items for investors
+- Further learning resources
+
+Make your explanation accessible to both beginners and experienced investors, with clear examples and actionable insights."""
+            
+            response = self.model.generate_content(prompt)
+            
+            return {
+                'response': response.text if response and response.text else f"Educational content is currently unavailable. Please try again later.",
+                'query_type': 'financial_education',
+                'confidence': 0.9,
+                'entities': entities,
+                'intent': 'financial_education'
+            }
+            
+        except Exception as e:
+            logger.error(f"Error in financial education: {e}")
+            return {
+                'response': f"I encountered an error providing educational content. Please try again.",
+                'query_type': 'financial_education',
+                'confidence': 0.6,
+                'entities': entities,
+                'intent': 'financial_education'
+            }
+    
+    def _handle_sentiment_query(self, query: str, entities: Dict) -> Dict:
+        """Handle sentiment analysis requests."""
+        if not self.model:
+            return {
+                'response': "I can analyze market sentiment and news impact. However, I need AI capabilities to provide detailed sentiment analysis. Please configure the Google API key for enhanced sentiment insights.",
+                'query_type': 'sentiment_analysis',
+                'confidence': 0.5,
+                'entities': entities,
+                'intent': 'sentiment_analysis'
+            }
+        
+        try:
+            prompt = f"""You are an expert market sentiment analyst. Analyze the sentiment and market impact for this query: "{query}"
+
+Please provide a comprehensive sentiment analysis including:
+
+**🧠 Sentiment Assessment:**
+- Overall sentiment score (0-100)
+- Positive, negative, and neutral components
+- Sentiment strength and confidence level
+- Historical sentiment trends
+
+**📰 News and Event Analysis:**
+- Key news events and their impact
+- Market reaction timeline
+- Media coverage analysis
+- Social media sentiment indicators
+
+**📊 Market Implications:**
+- Expected price movement direction
+- Volatility impact assessment
+- Trading volume implications
+- Sector and market-wide effects
+
+**🎯 Investment Insights:**
+- Short-term trading opportunities
+- Long-term investment implications
+- Risk factors and considerations
+- Position sizing recommendations
+
+**⚠️ Risk Considerations:**
+- Sentiment reversal risks
+- False signal possibilities
+- Market manipulation concerns
+- Overreaction scenarios
+
+**📈 Monitoring Points:**
+- Key indicators to watch
+- Sentiment change triggers
+- Confirmation signals
+- Exit strategies
+
+Format your response with clear sentiment scores, specific market insights, and actionable trading recommendations."""
+            
+            response = self.model.generate_content(prompt)
+            
+            return {
+                'response': response.text if response and response.text else f"Sentiment analysis is currently unavailable. Please try again later.",
+                'query_type': 'sentiment_analysis',
+                'confidence': 0.85,
+                'entities': entities,
+                'intent': 'sentiment_analysis'
+            }
+            
+        except Exception as e:
+            logger.error(f"Error in sentiment analysis: {e}")
+            return {
+                'response': f"I encountered an error analyzing sentiment. Please try again.",
+                'query_type': 'sentiment_analysis',
+                'confidence': 0.6,
+                'entities': entities,
+                'intent': 'sentiment_analysis'
+            }
+    
+    def _handle_document_query(self, query: str, entities: Dict) -> Dict:
+        """Handle document summarization requests."""
+        if not self.model:
+            return {
+                'response': "I can summarize financial documents and reports. However, I need AI capabilities to provide detailed document analysis. Please configure the Google API key for enhanced document summarization.",
+                'query_type': 'document_summarization',
+                'confidence': 0.5,
+                'entities': entities,
+                'intent': 'document_summarization'
+            }
+        
+        try:
+            prompt = f"""You are an expert financial document analyst. Provide a comprehensive summary and analysis for this request: "{query}"
+
+Please structure your response with:
+
+**📋 Document Summary:**
+- Executive summary of key points
+- Main themes and findings
+- Critical information highlights
+- Key metrics and data points
+
+**📊 Financial Analysis:**
+- Revenue and earnings insights
+- Balance sheet highlights
+- Cash flow analysis
+- Key performance indicators
+
+**🎯 Strategic Insights:**
+- Management commentary and guidance
+- Strategic initiatives and plans
+- Market positioning and competitive analysis
+- Growth opportunities and challenges
+
+**⚠️ Risk Assessment:**
+- Identified risks and uncertainties
+- Regulatory considerations
+- Market and operational risks
+- Mitigation strategies
+
+**📈 Investment Implications:**
+- Impact on stock valuation
+- Analyst and investor reactions
+- Trading opportunities
+- Portfolio allocation considerations
+
+**🔍 Key Takeaways:**
+- Most important points for investors
+- Action items and next steps
+- Questions for further research
+- Related documents to review
+
+Format your response with clear sections, specific quotes when relevant, and actionable investment insights."""
+            
+            response = self.model.generate_content(prompt)
+            
+            return {
+                'response': response.text if response and response.text else f"Document analysis is currently unavailable. Please try again later.",
+                'query_type': 'document_summarization',
+                'confidence': 0.85,
+                'entities': entities,
+                'intent': 'document_summarization'
+            }
+            
+        except Exception as e:
+            logger.error(f"Error in document analysis: {e}")
+            return {
+                'response': f"I encountered an error analyzing the document. Please try again.",
+                'query_type': 'document_summarization',
+                'confidence': 0.6,
+                'entities': entities,
+                'intent': 'document_summarization'
+            }
+    
+    def _handle_trading_workflow_query(self, query: str, entities: Dict) -> Dict:
+        """Handle trading workflow assistance requests."""
+        if not self.model:
+            return {
+                'response': "I can assist with trading workflows and strategies. However, I need AI capabilities to provide detailed trading assistance. Please configure the Google API key for enhanced trading workflow support.",
+                'query_type': 'trading_workflow',
+                'confidence': 0.5,
+                'entities': entities,
+                'intent': 'trading_workflow'
+            }
+        
+        try:
+            prompt = f"""You are an expert trading strategist and workflow consultant. Provide comprehensive trading assistance for this request: "{query}"
+
+Please structure your response with:
+
+**📋 Trading Workflow:**
+- Step-by-step trading process
+- Pre-market preparation checklist
+- Market analysis requirements
+- Trade execution guidelines
+
+**📊 Technical Analysis:**
+- Key technical indicators to monitor
+- Support and resistance levels
+- Chart patterns and signals
+- Risk management levels
+
+**🎯 Strategy Development:**
+- Entry and exit criteria
+- Position sizing recommendations
+- Stop loss and take profit levels
+- Risk-reward analysis
+
+**📈 Market Conditions:**
+- Optimal market environments
+- Volatility considerations
+- Sector and market timing
+- Economic calendar impact
+
+**⚠️ Risk Management:**
+- Maximum risk per trade
+- Portfolio risk limits
+- Drawdown protection
+- Psychological risk factors
+
+**📝 Trade Documentation:**
+- Trade journal requirements
+- Performance tracking metrics
+- Post-trade analysis process
+- Learning and improvement strategies
+
+**🔍 Monitoring and Adjustments:**
+- Key metrics to track
+- Adjustment triggers
+- Strategy optimization
+- Performance review process
+
+Format your response with actionable steps, specific criteria, and practical trading guidance."""
+            
+            response = self.model.generate_content(prompt)
+            
+            return {
+                'response': response.text if response and response.text else f"Trading workflow assistance is currently unavailable. Please try again later.",
+                'query_type': 'trading_workflow',
+                'confidence': 0.85,
+                'entities': entities,
+                'intent': 'trading_workflow'
+            }
+            
+        except Exception as e:
+            logger.error(f"Error in trading workflow assistance: {e}")
+            return {
+                'response': f"I encountered an error providing trading workflow assistance. Please try again.",
+                'query_type': 'trading_workflow',
+                'confidence': 0.6,
+                'entities': entities,
+                'intent': 'trading_workflow'
+            }
+    
+    def _handle_technical_analysis_query(self, query: str, entities: Dict) -> Dict:
+        """Handle technical analysis requests."""
+        tickers = entities.get('tickers', [])
+        metrics = entities.get('metrics', [])
+        
+        if not self.model:
+            return {
+                'response': "I can provide technical analysis and chart pattern recognition. However, I need AI capabilities to provide detailed technical analysis. Please configure the Google API key for enhanced technical insights.",
+                'query_type': 'technical_analysis',
+                'confidence': 0.5,
+                'entities': entities,
+                'intent': 'technical_analysis'
+            }
+        
+        try:
+            symbol = tickers[0] if tickers else 'AAPL'
+            technical_focus = metrics[0] if metrics else 'comprehensive technical analysis'
+            
+            prompt = f"""You are an expert technical analyst. Provide comprehensive technical analysis for {symbol} focusing on {technical_focus}.
+
+Please structure your response with:
+
+**📊 Technical Indicators:**
+- Moving averages (20, 50, 200-day)
+- RSI and momentum indicators
+- MACD and trend analysis
+- Volume and liquidity metrics
+
+**📈 Chart Patterns:**
+- Current chart patterns
+- Support and resistance levels
+- Trend lines and channels
+- Breakout and breakdown levels
+
+**🎯 Trading Signals:**
+- Buy/sell signals
+- Entry and exit points
+- Stop loss recommendations
+- Take profit targets
+
+**📊 Market Structure:**
+- Trend direction and strength
+- Volatility analysis
+- Volume profile
+- Market regime assessment
+
+**⚠️ Risk Assessment:**
+- Technical risk factors
+- False signal possibilities
+- Market condition dependencies
+- Risk management levels
+
+**📈 Price Targets:**
+- Short-term price objectives
+- Medium-term projections
+- Key resistance/support levels
+- Scenario analysis (bull/bear cases)
+
+**🔍 Key Levels to Watch:**
+- Critical support levels
+- Major resistance zones
+- Breakout confirmation levels
+- Reversal signal points
+
+Format your response with specific price levels, clear trading recommendations, and actionable technical insights."""
+            
+            response = self.model.generate_content(prompt)
+            
+            return {
+                'response': response.text if response and response.text else f"Technical analysis for {symbol} is currently unavailable. Please try again later.",
+                'query_type': 'technical_analysis',
+                'confidence': 0.85,
+                'entities': entities,
+                'intent': 'technical_analysis'
+            }
+            
+        except Exception as e:
+            logger.error(f"Error in technical analysis: {e}")
+            return {
+                'response': f"I encountered an error providing technical analysis. Please try again.",
+                'query_type': 'technical_analysis',
+                'confidence': 0.6,
+                'entities': entities,
+                'intent': 'technical_analysis'
+            }
+    
+    def _handle_risk_assessment_query(self, query: str, entities: Dict) -> Dict:
+        """Handle risk assessment requests."""
+        tickers = entities.get('tickers', [])
+        
+        if not self.model:
+            return {
+                'response': "I can assess investment risks and volatility. However, I need AI capabilities to provide detailed risk analysis. Please configure the Google API key for enhanced risk assessment.",
+                'query_type': 'risk_assessment',
+                'confidence': 0.5,
+                'entities': entities,
+                'intent': 'risk_assessment'
+            }
+        
+        try:
+            symbol = tickers[0] if tickers else 'portfolio'
+            
+            prompt = f"""You are an expert risk analyst. Provide comprehensive risk assessment for {symbol}.
+
+Please structure your response with:
+
+**📊 Risk Metrics:**
+- Volatility analysis (historical and implied)
+- Beta and market correlation
+- Value at Risk (VaR) calculations
+- Maximum drawdown potential
+
+**⚠️ Risk Categories:**
+- Market risk factors
+- Company-specific risks
+- Sector and industry risks
+- Macroeconomic risk exposure
+
+**📈 Risk-Return Profile:**
+- Expected return vs risk trade-off
+- Sharpe ratio and risk-adjusted returns
+- Downside risk analysis
+- Upside potential assessment
+
+**🎯 Risk Management:**
+- Position sizing recommendations
+- Diversification strategies
+- Hedging opportunities
+- Risk mitigation techniques
+
+**📊 Scenario Analysis:**
+- Best case scenario
+- Base case scenario
+- Worst case scenario
+- Stress test results
+
+**🔍 Key Risk Indicators:**
+- Early warning signals
+- Risk escalation triggers
+- Monitoring requirements
+- Review frequency
+
+**💡 Risk-Adjusted Strategies:**
+- Conservative approach
+- Moderate risk strategy
+- Aggressive positioning
+- Dynamic risk management
+
+Format your response with specific risk metrics, clear risk levels, and actionable risk management strategies."""
+            
+            response = self.model.generate_content(prompt)
+            
+            return {
+                'response': response.text if response and response.text else f"Risk assessment for {symbol} is currently unavailable. Please try again later.",
+                'query_type': 'risk_assessment',
+                'confidence': 0.85,
+                'entities': entities,
+                'intent': 'risk_assessment'
+            }
+            
+        except Exception as e:
+            logger.error(f"Error in risk assessment: {e}")
+            return {
+                'response': f"I encountered an error assessing risks. Please try again.",
+                'query_type': 'risk_assessment',
+                'confidence': 0.6,
+                'entities': entities,
+                'intent': 'risk_assessment'
+            }
+    
+    # Helper methods for enhanced analysis
+    
+    def _calculate_volatility_status(self, stock_data) -> str:
+        """Calculate volatility status from stock data."""
+        try:
+            if len(stock_data) < 20:
+                return "Limited Data"
+            
+            returns = stock_data['Close'].pct_change().dropna()
+            volatility = returns.std() * np.sqrt(252)  # Annualized
+            
+            if volatility > 0.4:
+                return "Very High"
+            elif volatility > 0.3:
+                return "High"
+            elif volatility > 0.2:
+                return "Medium"
+            else:
+                return "Low"
+        except:
+            return "Unknown"
+    
+    def _generate_price_insights(self, symbol: str, current_price: float, price_change_pct: float) -> str:
+        """Generate price insights based on current data."""
+        insights = []
+        
+        if abs(price_change_pct) > 5:
+            insights.append(f"⚠️ High volatility: {price_change_pct:+.1f}% change indicates significant market movement")
+        elif abs(price_change_pct) > 2:
+            insights.append(f"📊 Moderate movement: {price_change_pct:+.1f}% change suggests active trading")
+        else:
+            insights.append(f"📈 Stable trading: {price_change_pct:+.1f}% change indicates steady price action")
+        
+        if price_change_pct > 0:
+            insights.append("🟢 Positive momentum with potential for continued upside")
+        elif price_change_pct < 0:
+            insights.append("🔴 Negative pressure requiring careful monitoring")
+        
+        insights.append("💡 Consider volume confirmation and technical levels for trading decisions")
+        
+        return "\n".join(insights)
 
     def _handle_table_multi_query(self, query, query_lower):
         """Handle multi-asset table queries"""
