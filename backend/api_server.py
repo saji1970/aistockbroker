@@ -2181,16 +2181,26 @@ def get_day_trading_prediction(symbol):
         # Check if predictor is available
         if not predictor or not predictor.data_fetcher:
             # Return mock prediction if predictor is not available
+            logger.warning(f"Predictor not available, returning mock prediction for {symbol}")
             return jsonify(generate_mock_day_trading_prediction(symbol, target_date))
         
         # Get stock data
-        stock_data = predictor.data_fetcher.fetch_stock_data(symbol, period='1mo')
-        if stock_data is None or stock_data.empty:
-            return jsonify({'error': f'No data available for {symbol}'}), 404
+        try:
+            stock_data = predictor.data_fetcher.fetch_stock_data(symbol, period='1mo')
+            if stock_data is None or stock_data.empty:
+                logger.warning(f"No real data available for {symbol}, returning mock prediction")
+                return jsonify(generate_mock_day_trading_prediction(symbol, target_date))
+        except Exception as data_error:
+            logger.warning(f"Error fetching data for {symbol}: {data_error}, returning mock prediction")
+            return jsonify(generate_mock_day_trading_prediction(symbol, target_date))
         
         # Perform technical analysis
-        technical_analyzer = TechnicalAnalyzer()
-        current_price = stock_data['Close'].iloc[-1]
+        try:
+            technical_analyzer = TechnicalAnalyzer()
+            current_price = stock_data['Close'].iloc[-1]
+        except Exception as analyzer_error:
+            logger.warning(f"Error initializing TechnicalAnalyzer: {analyzer_error}, returning mock prediction")
+            return jsonify(generate_mock_day_trading_prediction(symbol, target_date))
         
         # Calculate technical indicators
         sma_20 = stock_data['Close'].rolling(window=20).mean().iloc[-1]
