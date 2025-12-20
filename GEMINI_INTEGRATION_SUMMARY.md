@@ -256,3 +256,4 @@ The Gemini AI integration is now **fully implemented and ready for use**. The AI
 **The AI Assistant now uses the model which is training for stock in Gemini!** 🚀
 
 Users can simply select "Gemini 1.5 Pro (Stock Expert)" from the model dropdown and start getting advanced AI-powered stock analysis immediately.
+
