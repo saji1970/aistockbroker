@@ -15,7 +15,7 @@ import yfinance as yf
 import pandas as pd
 import numpy as np
 
-from gemini_predictor import GeminiStockPredictor
+from ai_provider_factory import AIProviderFactory
 from agent_manager import agent_manager, Customer, TradeSuggestion, CustomerTier
 from shadow_trading_bot import ShadowTradingBot
 
@@ -54,9 +54,9 @@ class AISuggestion:
 
 class AISuggestionEngine:
     """AI-powered suggestion engine for agents"""
-    
+
     def __init__(self):
-        self.gemini_predictor = GeminiStockPredictor()
+        self.gemini_predictor = AIProviderFactory.create_predictor()
         self.market_data_cache = {}
         self.suggestion_history = []
         self.learning_weights = {}

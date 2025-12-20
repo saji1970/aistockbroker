@@ -19,7 +19,7 @@ import numpy as np
 from concurrent.futures import ThreadPoolExecutor
 import threading
 import pickle
-from gemini_predictor import GeminiStockPredictor
+from ai_provider_factory import AIProviderFactory
 from data_fetcher import data_fetcher
 from config import Config
 
@@ -230,17 +230,17 @@ class RSIStrategy(TradingStrategy):
         return 40 <= self.calculate_rsi([current_data.close]) <= 60
 
 class GeminiStrategy(TradingStrategy):
-    """AI-powered trading strategy using Gemini predictions"""
+    """AI-powered trading strategy using AI predictions (Gemini or HuggingFace)"""
 
     def __init__(self, parameters: Dict):
-        super().__init__("GeminiAI", parameters)
+        super().__init__("AI Strategy", parameters)
         self.confidence_threshold = parameters.get('confidence_threshold', 0.7)
         self.prediction_timeframe = parameters.get('prediction_timeframe', '1d')
         self.min_expected_return = parameters.get('min_expected_return', 0.02)
         self.predictor = None
 
     def set_predictor(self, predictor):
-        """Set the Gemini predictor instance"""
+        """Set the AI predictor instance (Gemini or HuggingFace)"""
         self.predictor = predictor
 
     def analyze(self, data: List[StockData], symbol: str = None) -> OrderType:
@@ -432,8 +432,8 @@ class ShadowTradingBot:
         self.watchlist = []
         self.running = False
 
-        # Initialize Gemini predictor and data fetcher
-        self.gemini_predictor = GeminiStockPredictor(data_fetcher)
+        # Initialize AI predictor (supports Gemini or HuggingFace) and data fetcher
+        self.gemini_predictor = AIProviderFactory.create_predictor(data_fetcher)
         self.data_fetcher = data_fetcher
 
         # Daily evaluation tracking

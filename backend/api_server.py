@@ -34,10 +34,10 @@ import yfinance as yf
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 try:
-    from gemini_predictor import GeminiStockPredictor
+    from ai_provider_factory import AIProviderFactory
 except ImportError as e:
-    print(f"Warning: Could not import GeminiStockPredictor: {e}")
-    GeminiStockPredictor = None
+    print(f"Warning: Could not import AIProviderFactory: {e}")
+    AIProviderFactory = None
 try:
     from portfolio_manager import PortfolioManager, SignalType, AssetType
     from enhanced_portfolio_manager import EnhancedPortfolioManager, PortfolioConfig
@@ -3259,40 +3259,47 @@ def get_trading_bot_orders():
 
 @app.route('/api/ai/gemini-query', methods=['POST', 'OPTIONS'])
 def gemini_query():
-    """Handle AI queries using Gemini model for stock analysis"""
+    """Handle AI queries using configured AI provider (Gemini or HuggingFace)"""
     if request.method == 'OPTIONS':
         return jsonify({'status': 'ok'}), 200
-    
+
     try:
         data = request.get_json()
         if not data:
             return jsonify({'error': 'No JSON data provided'}), 400
-        
+
         query = data.get('query', '')
         temperature = data.get('temperature', 0.7)
         max_tokens = data.get('maxTokens', 2048)
         market = data.get('market', 'US')
-        
+
         if not query:
             return jsonify({'error': 'Query is required'}), 400
-        
-        # Initialize Gemini predictor if available
-        if GeminiStockPredictor and Config and Config.GOOGLE_API_KEY:
+
+        # Initialize AI predictor using factory (supports Gemini or HuggingFace)
+        if AIProviderFactory:
             try:
-                predictor = GeminiStockPredictor()
+                predictor = AIProviderFactory.create_predictor()
                 if hasattr(predictor, 'model') and predictor.model:
-                    # Use Gemini for natural language processing
+                    # Use AI provider for natural language processing
                     result = predictor.process_natural_language_query(query)
-                    
+
+                    # Determine model name based on provider
+                    if Config.AI_PROVIDER == 'huggingface':
+                        model_name = Config.HF_MODEL
+                    else:
+                        model_name = 'Gemini 1.5 Pro'
+
                     return jsonify({
                         'response': result.get('response', 'No response generated'),
                         'query_type': result.get('query_type', 'general'),
                         'confidence': result.get('confidence', 0.7),
-                        'model_used': 'Gemini 1.5 Pro',
+                        'model_used': model_name,
+                        'provider': Config.AI_PROVIDER,
                         'timestamp': datetime.now().isoformat()
                     })
                 else:
-                    logger.warning("Gemini model not initialized properly")
+                    logger.warning("AI model not initialized properly")
                     return jsonify({
                         'response': generate_default_ai_response(query),
                         'query_type': 'general',
@@ -3301,7 +3308,7 @@ def gemini_query():
                         'timestamp': datetime.now().isoformat()
                     })
             except Exception as e:
-                logger.error(f"Gemini query processing error: {e}")
+                logger.error(f"AI query processing error: {e}")
                 return jsonify({
                     'response': generate_default_ai_response(query),
                     'query_type': 'general',
@@ -3311,7 +3318,7 @@ def gemini_query():
                     'timestamp': datetime.now().isoformat()
                 })
         else:
-            logger.warning("Gemini not available, using fallback response")
+            logger.warning("AI provider not available, using fallback response")
             return jsonify({
                 'response': generate_default_ai_response(query),
                 'query_type': 'general',
